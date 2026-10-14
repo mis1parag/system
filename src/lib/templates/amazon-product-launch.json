@@ -1,0 +1,66 @@
+{
+  "name": "Amazon Product Launch",
+  "description": "From the Drive sheet “Master Launch Tracker”: 21 steps for every new SKU — keywords, content, images, listing, price, coupon, campaigns, FBA shipment, then the day-15, day-30 and day-60 reviews. Days are counted from the launch date.",
+  "anchorField": "launch",
+  "titleFields": ["sku", "product"],
+  "groupField": "",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 65,
+  "openLabel": "Launching",
+  "doneLabel": "Launched",
+  "fields": [
+    { "key": "sku", "label": "SKU", "type": "text", "required": true, "unique": true },
+    { "key": "product", "label": "Product name", "type": "text", "required": true },
+    { "key": "launch", "label": "Launch date", "type": "date", "required": true },
+    { "key": "refLink", "label": "Reference link", "type": "url" }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Keyword research", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "2 working days before launch", "rule": { "base": "anchor", "offsetDays": -2 } },
+    {
+      "stepId": "s2", "name": "Content creation", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "2 working days before launch", "rule": { "base": "anchor", "offsetDays": -2 },
+      "completionFields": [{ "key": "brand", "label": "Brand", "type": "text" }, { "key": "mrp", "label": "MRP", "type": "number" }, { "key": "hsn", "label": "HSN", "type": "text" }]
+    },
+    {
+      "stepId": "s3", "name": "Listing images", "assigneeName": "Vipin", "how": "Phase 1 (Day 0-5)", "whenText": "2 working days before launch", "rule": { "base": "anchor", "offsetDays": -2 },
+      "completionFields": [{ "key": "itemWeight", "label": "Item weight", "type": "text" }, { "key": "itemLbh", "label": "Item L x B x H", "type": "text" }, { "key": "capacity", "label": "Capacity", "type": "text" }]
+    },
+    { "stepId": "s4", "name": "Create A+ image", "assigneeName": "Vipin", "how": "Phase 1 (Day 0-5)", "whenText": "2 working days before launch", "rule": { "base": "anchor", "offsetDays": -2 } },
+    { "stepId": "s5", "name": "Upload A+ image", "assigneeName": "Vipin", "how": "Phase 1 (Day 0-5)", "whenText": "2 working days before launch", "rule": { "base": "anchor", "offsetDays": -2 } },
+    { "stepId": "s6", "name": "Create listing on platforms", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "1 working day after launch", "rule": { "base": "anchor", "offsetDays": 1 } },
+    {
+      "stepId": "s7", "name": "Update package weight and L x B x H", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "On launch day", "rule": { "base": "anchor", "offsetDays": 0 },
+      "completionFields": [{ "key": "pkgWeight", "label": "Package weight", "type": "text" }, { "key": "pkgLbh", "label": "Package L x B x H", "type": "text" }]
+    },
+    {
+      "stepId": "s8", "name": "Configure launch price (10-20% lower for the first 30 days)", "assigneeName": "Nikhil", "how": "Phase 1 (Day 0-5)", "whenText": "On launch day", "rule": { "base": "anchor", "offsetDays": 0 },
+      "completionFields": [{ "key": "launchPrice", "label": "Launch price", "type": "number" }]
+    },
+    { "stepId": "s9", "name": "Create 5% coupon for 30 days (budget 100 units)", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "1 working day after launch", "rule": { "base": "anchor", "offsetDays": 1 } },
+    { "stepId": "s10", "name": "Create auto campaign (Rs 200 daily budget)", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "1 working day after launch", "rule": { "base": "anchor", "offsetDays": 1 } },
+    { "stepId": "s11", "name": "Create phrase match SP campaign (Rs 200 daily budget)", "assigneeName": "Vicky", "how": "Phase 1 (Day 0-5)", "whenText": "1 working day after launch", "rule": { "base": "anchor", "offsetDays": 1 } },
+    { "stepId": "s12", "name": "Create shipment for FBA", "assigneeName": "Nikhil", "how": "Phase 1 (Day 0-5)", "whenText": "7 working days after launch", "rule": { "base": "anchor", "offsetDays": 7 } },
+    { "stepId": "s13", "name": "Create and upload product video", "assigneeName": "Vipin", "how": "Phase 1 (Day 0-5)", "whenText": "5 working days after launch", "rule": { "base": "anchor", "offsetDays": 5 } },
+    {
+      "stepId": "s14", "name": "Check sessions (first 15 days) and set target = 2x for the next 15 days", "assigneeName": "Vicky", "how": "Phase 2 (Day 15)", "whenText": "15 working days after launch", "rule": { "base": "anchor", "offsetDays": 15 },
+      "completionFields": [{ "key": "session15", "label": "Sessions (15 days)", "type": "number" }, { "key": "target15", "label": "Target for next 15 days", "type": "number" }]
+    },
+    {
+      "stepId": "s15", "name": "Check CTR and conversion rate", "assigneeName": "Vicky", "how": "Phase 3 (Day 30)", "whenText": "32 working days after launch", "rule": { "base": "anchor", "offsetDays": 32 },
+      "completionFields": [{ "key": "ctr", "label": "CTR %", "type": "number" }, { "key": "conversion", "label": "Conversion rate %", "type": "number" }]
+    },
+    { "stepId": "s16", "name": "Change main image if CTR is low", "assigneeName": "Vipin", "how": "Phase 3 (Day 30)", "whenText": "32 working days after launch", "rule": { "base": "anchor", "offsetDays": 32 } },
+    { "stepId": "s17", "name": "Keyword mining from the search term report — create exact match campaign", "assigneeName": "Nikhil", "how": "Phase 3 (Day 30)", "whenText": "32 working days after launch", "rule": { "base": "anchor", "offsetDays": 32 } },
+    {
+      "stepId": "s18", "name": "Review and configure deal price", "assigneeName": "Nikhil", "how": "Phase 3 (Day 30)", "whenText": "35 working days after launch", "rule": { "base": "anchor", "offsetDays": 35 },
+      "completionFields": [{ "key": "dealPrice", "label": "Deal price", "type": "number" }]
+    },
+    { "stepId": "s19", "name": "Add negative keywords and ASINs", "assigneeName": "Nikhil", "how": "Phase 3 (Day 30)", "whenText": "32 working days after launch", "rule": { "base": "anchor", "offsetDays": 32 } },
+    { "stepId": "s20", "name": "Create PT-CT campaign", "assigneeName": "Nikhil", "how": "Phase 3 (Day 30)", "whenText": "32 working days after launch", "rule": { "base": "anchor", "offsetDays": 32 } },
+    {
+      "stepId": "s21", "name": "Calculate TACOS for the past 60 days and set the target TACOS", "assigneeName": "Nikhil", "how": "Phase 4 (Day 60)", "whenText": "62 working days after launch", "rule": { "base": "anchor", "offsetDays": 62 },
+      "completionFields": [{ "key": "tacos", "label": "TACOS %", "type": "number" }, { "key": "tacosTarget", "label": "Target TACOS %", "type": "number" }]
+    }
+  ]
+}

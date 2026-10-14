@@ -1,0 +1,32 @@
+{
+  "name": "Employee Onboarding",
+  "description": "Everything that must happen before and after a new joiner's first day.",
+  "anchorField": "joiningDate",
+  "titleFields": ["employee", "role"],
+  "groupField": "department",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 30,
+  "openLabel": "Onboarding",
+  "doneLabel": "Onboarded",
+  "fields": [
+    { "key": "employee", "label": "Employee name", "type": "text", "required": true },
+    { "key": "role", "label": "Role", "type": "text", "required": true },
+    { "key": "department", "label": "Department", "type": "select", "required": true, "options": ["Sales", "Operations", "Accounts", "HR", "IT"] },
+    { "key": "joiningDate", "label": "Joining date", "type": "date", "required": true },
+    { "key": "laptop", "label": "Laptop needed", "type": "checkbox" },
+    { "key": "phone", "label": "Mobile", "type": "phone" }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Collect joining documents", "assigneeName": "HR", "how": "Mail / WhatsApp", "whenText": "5 working days before joining", "rule": { "base": "anchor", "offsetDays": -5 } },
+    { "stepId": "s2", "name": "Create email and system accounts", "assigneeName": "IT", "how": "Admin console", "whenText": "2 working days before joining", "rule": { "base": "anchor", "offsetDays": -2 } },
+    {
+      "stepId": "s3", "name": "Allot laptop", "assigneeName": "IT", "how": "Asset register", "whenText": "1 working day before joining (only if a laptop is needed)",
+      "rule": { "base": "anchor", "offsetDays": -1 }, "condition": { "field": "laptop", "op": "filled" },
+      "completionFields": [{ "key": "asset", "label": "Asset tag", "type": "text", "required": true }]
+    },
+    { "stepId": "s4", "name": "Induction on day one", "assigneeName": "HR", "how": "In person", "whenText": "10 AM on the joining date", "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "10:00" } },
+    { "stepId": "s5", "name": "30-day review", "assigneeName": "HR", "how": "Meeting", "whenText": "22 working days after joining", "rule": { "base": "anchor", "offsetDays": 22 } }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "name": "Reconcile – Process FMS",
+  "description": "From the Drive sheet “Reconcile Sheet” (Process FMS): after every Amazon / Blinkit / Instamart appointment — count shipped vs received, upload GRN / POD / docket, review and decide on returns. Use Postpone when the appointment is rescheduled.",
+  "anchorField": "appointment",
+  "titleFields": ["mode", "po"],
+  "groupField": "mode",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "Open",
+  "doneLabel": "Reviewed",
+  "fields": [
+    { "key": "mode", "label": "Mode of order", "type": "select", "required": true, "options": ["Amazon", "Blinkit", "Instamart", "Flipkart", "Dmart"] },
+    { "key": "po", "label": "PO number / Shipment ID", "type": "text", "required": true, "unique": true },
+    { "key": "appointment", "label": "Appointment date", "type": "datetime", "required": true },
+    { "key": "pickup", "label": "Pick up date", "type": "datetime" },
+    { "key": "warehouse", "label": "Warehouse name", "type": "text" },
+    { "key": "lr", "label": "LR no.", "type": "text" }
+  ],
+  "steps": [
+    {
+      "stepId": "s1", "name": "Confirm shipped and enter short quantities", "assigneeName": "Kunal", "how": "Count manually", "whenText": "At the appointment time",
+      "rule": { "base": "anchor", "offsetDays": 0 },
+      "completionFields": [
+        { "key": "shipped", "label": "Shipped qty", "type": "number", "required": true },
+        { "key": "received", "label": "Received qty", "type": "number" },
+        { "key": "short", "label": "Short qty", "type": "number" }
+      ]
+    },
+    {
+      "stepId": "s2", "name": "Upload documents and review everything", "assigneeName": "Kunal", "how": "Download, upload and review", "whenText": "1 working day after the appointment",
+      "rule": { "base": "anchor", "offsetDays": 1 },
+      "completionFields": [
+        { "key": "grn", "label": "GRN report link", "type": "url" }, { "key": "pod", "label": "POD link", "type": "url" }, { "key": "docket", "label": "Docket link", "type": "url" }
+      ]
+    },
+    {
+      "stepId": "s3", "name": "Review and return", "assigneeName": "Kunal", "how": "Finalize everything", "whenText": "Same time as the previous step",
+      "rule": { "base": "prev_actual", "offsetDays": 0 },
+      "completionFields": [
+        { "key": "returnStatus", "label": "Return status", "type": "select", "required": true, "options": ["No return", "Return needed", "Returned"] },
+        { "key": "returnReason", "label": "Reason of return", "type": "text" }
+      ]
+    }
+  ]
+}

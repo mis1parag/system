@@ -1,0 +1,24 @@
+{
+  "name": "Flipkart & Amazon PO FMS",
+  "description": "From the Drive sheet “FLIPKART & AMAZON PO FMS SHEET”: packing material, invoice and dispatch, reconciliation.",
+  "anchorField": "pickup",
+  "titleFields": ["shipment"],
+  "groupField": "",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "In progress",
+  "doneLabel": "Reconciled",
+  "fields": [
+    { "key": "shipment", "label": "Shipment ID", "type": "text", "required": true, "unique": true },
+    { "key": "boxes", "label": "Boxes", "type": "number" },
+    { "key": "qty", "label": "Quantity", "type": "number" },
+    { "key": "pickup", "label": "Pick up date", "type": "datetime", "required": true }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Inform Vijay about the packing material", "assigneeName": "Omprakash", "how": "Call", "whenText": "2 working days before pickup", "rule": { "base": "anchor", "offsetDays": -2 } },
+    { "stepId": "s2", "name": "Take the invoice from Rahul and dispatch the material", "assigneeName": "Omprakash", "how": "Call", "whenText": "10 AM on the pickup date", "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "10:00" }, "completionFields": [{ "key": "docket", "label": "Docket / LR no", "type": "text" }] },
+    { "stepId": "s3", "name": "Reconcile material received on the portal with the invoice", "assigneeName": "Omprakash", "how": "Manual check", "whenText": "14 working days after pickup", "rule": { "base": "anchor", "offsetDays": 14 }, "completionFields": [{ "key": "reconcile", "label": "Reconciliation note", "type": "textarea" }] }
+  ]
+}

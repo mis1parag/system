@@ -1,0 +1,47 @@
+{
+  "name": "Instamart & Blinkit PO Dispatch",
+  "description": "From dispatch to POD: track every PO/STO through dispatch confirmation, hub delivery, driver details and POD.",
+  "anchorField": "appointmentDate",
+  "titleFields": ["po", "location"],
+  "groupField": "location",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "openLabel": "Pending",
+  "doneLabel": "Delivered",
+  "fields": [
+    { "key": "location", "label": "Delivery location", "type": "text", "required": true },
+    { "key": "po", "label": "PO number / STO number", "type": "text", "required": true },
+    { "key": "boxes", "label": "Number of boxes", "type": "number", "required": true },
+    { "key": "dispatchDate", "label": "Dispatch date", "type": "datetime", "required": true },
+    { "key": "appointmentDate", "label": "Appointment date", "type": "datetime", "required": true },
+    { "key": "pickupDate", "label": "Pick up date", "type": "datetime" },
+    { "key": "mode", "label": "Mode of order", "type": "select", "options": ["Blinkit", "Instamart"] }
+  ],
+  "steps": [
+    {
+      "stepId": "s1", "name": "Dispatch material", "assigneeName": "Kunal", "how": "Checklist",
+      "whenText": "8 days before appointment date", "autoDone": true, "rule": { "base": "none" }
+    },
+    {
+      "stepId": "s2", "name": "Take dispatch confirmation next day & take Docket Copy", "assigneeName": "Kunal", "how": "Call Aakash / Hub manager",
+      "whenText": "1 working day after dispatch date", "rule": { "base": "field", "field": "dispatchDate", "offsetDays": 1 }
+    },
+    {
+      "stepId": "s3", "name": "Coordinate with logistics partner & confirm delivery at delivery hub", "assigneeName": "Kunal", "how": "Call Aakash / Hub manager",
+      "whenText": "One working day before appointment date", "rule": { "base": "anchor", "offsetDays": -1 }
+    },
+    {
+      "stepId": "s4", "name": "Coordinate with logistics partner and send driver / vehicle details", "assigneeName": "Nidhi", "how": "Mail / Call",
+      "whenText": "11 AM on appointment date", "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "11:00" }
+    },
+    {
+      "stepId": "s5", "name": "Request POD from delivery partner", "assigneeName": "Kunal", "how": "Call",
+      "whenText": "1 working day after appointment date", "rule": { "base": "anchor", "offsetDays": 1 }
+    },
+    {
+      "stepId": "s6", "name": "Receive POD from delivery partner", "assigneeName": "Kunal", "how": "Call",
+      "whenText": "7 working days after appointment date", "rule": { "base": "anchor", "offsetDays": 7 }
+    }
+  ]
+}

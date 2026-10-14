@@ -1,0 +1,44 @@
+{
+  "name": "Reconcile – Return FMS",
+  "description": "From the Drive sheet “Reconcile Sheet” (Return FMS): arrange the pickup with logistics, follow up with the courier, receive and review the returned material, credit note.",
+  "anchorField": "raised",
+  "titleFields": ["mode", "po"],
+  "groupField": "returnType",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 15,
+  "openLabel": "Return open",
+  "doneLabel": "Return closed",
+  "fields": [
+    { "key": "mode", "label": "Mode of order", "type": "select", "required": true, "options": ["Amazon", "Blinkit", "Instamart", "Flipkart", "Dmart"] },
+    { "key": "po", "label": "PO / Shipment no.", "type": "text", "required": true },
+    { "key": "raised", "label": "Return raised on", "type": "datetime", "required": true },
+    { "key": "appointment", "label": "Appointment", "type": "datetime" },
+    { "key": "shippedOn", "label": "Date of shipped", "type": "date" },
+    { "key": "returnType", "label": "Return type", "type": "select", "required": true, "options": ["Excess", "Damage", "Expiry", "Short", "Other"] },
+    { "key": "qtyPcs", "label": "Quantity in pcs", "type": "number" },
+    { "key": "qtyBox", "label": "Quantity in box", "type": "number" },
+    { "key": "dn", "label": "Debit note (DN) link", "type": "url" }
+  ],
+  "steps": [
+    {
+      "stepId": "s1", "name": "Connect with logistics and coordinate with the warehouse manager (request return pickup)", "assigneeName": "Kunal", "how": "Call", "whenText": "3 working days after the return is raised",
+      "rule": { "base": "anchor", "offsetDays": 3 },
+      "completionFields": [{ "key": "feedback1", "label": "Call feedback", "type": "text" }, { "key": "again", "label": "Need to call again", "type": "select", "options": ["Yes", "No"] }]
+    },
+    {
+      "stepId": "s2", "name": "Follow up with logistics / courier partner (return status)", "assigneeName": "Kunal", "how": "Call", "whenText": "2 working days after the previous step",
+      "rule": { "base": "prev_actual", "offsetDays": 2 },
+      "completionFields": [{ "key": "feedback2", "label": "Call feedback", "type": "text" }, { "key": "status2", "label": "Return status", "type": "select", "options": ["Return scheduled", "In transit", "Delivered"] }]
+    },
+    {
+      "stepId": "s3", "name": "Receive and review the returned material", "assigneeName": "Kunal", "how": "Quality check", "whenText": "1 working day after the follow-up",
+      "rule": { "base": "prev_actual", "offsetDays": 1 },
+      "completionFields": [
+        { "key": "qc", "label": "Quality check done", "type": "checkbox" }, { "key": "weight", "label": "Weight", "type": "number" },
+        { "key": "polish", "label": "Polish OK", "type": "checkbox" }, { "key": "verified", "label": "Verified", "type": "checkbox" }, { "key": "creditNote", "label": "Credit note no.", "type": "text" }
+      ]
+    }
+  ]
+}

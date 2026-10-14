@@ -1,0 +1,39 @@
+{
+  "name": "Inventory Order FMS",
+  "description": "From the Drive sheet “Inventory Order”: order raised through the form, confirmed, dispatch confirmed, delivery checked, material reconciled.",
+  "anchorField": "expected",
+  "titleFields": ["inward", "vendor"],
+  "groupField": "vendor",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "Order open",
+  "doneLabel": "Reconciled",
+  "fields": [
+    { "key": "inward", "label": "Inward no.", "type": "text", "required": true, "unique": true },
+    { "key": "vendor", "label": "Vendor name", "type": "text", "required": true },
+    { "key": "phone", "label": "Phone no.", "type": "phone" },
+    { "key": "item", "label": "Item name", "type": "text", "required": true },
+    { "key": "qty", "label": "Quantity", "type": "number", "required": true },
+    { "key": "uom", "label": "UOM", "type": "select", "options": ["Pcs", "Kg", "Box", "Set", "Mtr", "Ltr"] },
+    { "key": "urgency", "label": "Urgency", "type": "select", "options": ["Low", "Medium", "High"] },
+    { "key": "location", "label": "Location", "type": "text" },
+    { "key": "expected", "label": "Expected receiving date", "type": "date", "required": true }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Issue PO", "assigneeName": "Sapna", "how": "Google Form", "whenText": "Whenever needed (done when the entry is added)", "rule": { "base": "none" }, "autoDone": true },
+    { "stepId": "s2", "name": "Order confirmation", "assigneeName": "Sapna", "how": "Call", "whenText": "2 working days after the order", "rule": { "base": "created", "offsetDays": 2 } },
+    { "stepId": "s3", "name": "Confirm dispatch", "assigneeName": "Sapna", "how": "Call", "whenText": "2 working days after the order confirmation", "rule": { "base": "prev_actual", "offsetDays": 2 }, "completionFields": [{ "key": "dispatchDate", "label": "Dispatch date", "type": "date" }] },
+    {
+      "stepId": "s4", "name": "Delivery", "assigneeName": "Sapna", "how": "Check qty received", "whenText": "On the expected receiving date",
+      "rule": { "base": "anchor", "offsetDays": 0 }, "escalateAfterMinutes": 240,
+      "completionFields": [{ "key": "receivedQty", "label": "Received qty", "type": "number", "required": true }, { "key": "remark", "label": "Remark", "type": "text" }]
+    },
+    {
+      "stepId": "s5", "name": "Reconcile material", "assigneeName": "Sapna", "how": "Check material", "whenText": "3 working days after delivery",
+      "rule": { "base": "prev_actual", "offsetDays": 3 },
+      "completionFields": [{ "key": "adjusted", "label": "Cancelled or adjusted qty", "type": "number" }, { "key": "pending", "label": "Pending qty", "type": "number" }, { "key": "remark", "label": "Remark", "type": "text" }]
+    }
+  ]
+}

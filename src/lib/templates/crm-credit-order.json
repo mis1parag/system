@@ -1,0 +1,74 @@
+{
+  "name": "CRM Credit Order & Payment",
+  "description": "From the Drive sheet “CRM Credit FMS Panel”: order confirmation → dispatch → invoice & docket → delivery → feedback, then payment follow-ups around the due date. Part deliveries are optional steps.",
+  "anchorField": "orderDate",
+  "titleFields": ["client", "orderId"],
+  "groupField": "",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "In progress",
+  "doneLabel": "Closed",
+  "fields": [
+    { "key": "client", "label": "Client name", "type": "text", "required": true },
+    { "key": "orderId", "label": "Order ID", "type": "text", "required": true, "unique": true },
+    { "key": "orderDate", "label": "Order date", "type": "datetime", "required": true },
+    { "key": "dueDate", "label": "Payment due date", "type": "date", "required": true },
+    { "key": "partDelivery", "label": "Part delivery / part payment", "type": "checkbox" }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Take order confirmation", "assigneeName": "Riya", "how": "Call", "whenText": "2 working days after the order", "rule": { "base": "anchor", "offsetDays": 2 } },
+    { "stepId": "s2", "name": "Confirm dispatch from Vijay", "assigneeName": "Riya", "how": "Call", "whenText": "7 working days after the order", "rule": { "base": "anchor", "offsetDays": 7 } },
+    { "stepId": "s3", "name": "Order dispatched", "assigneeName": "Riya", "how": "WhatsApp", "whenText": "1 working day after dispatch confirmation", "rule": { "base": "prev_actual", "offsetDays": 1 } },
+    {
+      "stepId": "s4", "name": "Send invoice", "assigneeName": "Shivani", "how": "Mail / WhatsApp", "whenText": "1 working day after dispatch",
+      "rule": { "base": "prev_actual", "offsetDays": 1 },
+      "completionFields": [{ "key": "invoiceNo", "label": "Invoice no", "type": "text", "required": true }, { "key": "billAmt", "label": "Bill amount", "type": "number", "required": true }]
+    },
+    { "stepId": "s5", "name": "Send docket", "assigneeName": "Shivani", "how": "WhatsApp", "whenText": "1 working day after the invoice", "rule": { "base": "prev_actual", "offsetDays": 1 } },
+    { "stepId": "s6", "name": "Delivery confirmation", "assigneeName": "Shivani", "how": "Call", "whenText": "10 working days after sending the docket", "rule": { "base": "prev_actual", "offsetDays": 10 }, "escalateAfterMinutes": 240 },
+    {
+      "stepId": "s7", "name": "Feedback", "assigneeName": "Shivani", "how": "Call", "whenText": "1 working day after delivery",
+      "rule": { "base": "prev_actual", "offsetDays": 1 }, "completionFields": [{ "key": "feedback", "label": "Client feedback", "type": "textarea" }]
+    },
+    {
+      "stepId": "s8", "name": "Payment confirmation (3 days before due)", "assigneeName": "Shivani", "how": "Call", "whenText": "3 working days before the due date",
+      "rule": { "base": "field", "field": "dueDate", "offsetDays": -3 }
+    },
+    {
+      "stepId": "s9", "name": "Payment confirmation (I) — due date", "assigneeName": "Shivani", "how": "Call / bank", "whenText": "On the due date",
+      "rule": { "base": "field", "field": "dueDate", "offsetDays": 0 },
+      "completionFields": [{ "key": "received", "label": "Received amount", "type": "number" }, { "key": "pending", "label": "Pending amount", "type": "number" }]
+    },
+    {
+      "stepId": "s10", "name": "Payment confirmation (II)", "assigneeName": "Shivani", "how": "Call", "whenText": "7 working days after the due date",
+      "rule": { "base": "field", "field": "dueDate", "offsetDays": 7 }, "escalateAfterMinutes": 240,
+      "completionFields": [{ "key": "received", "label": "Received amount", "type": "number" }, { "key": "pending", "label": "Pending amount", "type": "number" }]
+    },
+    {
+      "stepId": "s11", "name": "Payment confirmation (III) — final", "assigneeName": "Shivani", "how": "Call / visit", "whenText": "14 working days after the due date",
+      "rule": { "base": "field", "field": "dueDate", "offsetDays": 14 }, "escalateAfterMinutes": 120,
+      "completionFields": [{ "key": "received", "label": "Received amount", "type": "number" }, { "key": "pending", "label": "Pending amount", "type": "number" }]
+    },
+    {
+      "stepId": "s12", "name": "Part: invoice and docket", "assigneeName": "Shivani", "how": "Mail / WhatsApp", "whenText": "Only for part deliveries — about 10 working days after the order",
+      "rule": { "base": "anchor", "offsetDays": 10 }, "condition": { "field": "partDelivery", "op": "filled" },
+      "completionFields": [{ "key": "partInvoice", "label": "Part invoice no", "type": "text" }, { "key": "partAmt", "label": "Part bill amount", "type": "number" }]
+    },
+    {
+      "stepId": "s13", "name": "Part: order delivery confirmation", "assigneeName": "Shivani", "how": "Call", "whenText": "Only for part deliveries — about 20 working days after the order",
+      "rule": { "base": "anchor", "offsetDays": 20 }, "condition": { "field": "partDelivery", "op": "filled" }
+    },
+    {
+      "stepId": "s14", "name": "Part: feedback", "assigneeName": "Shivani", "how": "Call", "whenText": "Only for part deliveries",
+      "rule": { "base": "anchor", "offsetDays": 21 }, "condition": { "field": "partDelivery", "op": "filled" },
+      "completionFields": [{ "key": "partFeedback", "label": "Feedback", "type": "textarea" }]
+    },
+    {
+      "stepId": "s15", "name": "Part: payment confirmation", "assigneeName": "Shivani", "how": "Call / bank", "whenText": "Only for part deliveries — about 25 working days after the order",
+      "rule": { "base": "anchor", "offsetDays": 25 }, "condition": { "field": "partDelivery", "op": "filled" },
+      "completionFields": [{ "key": "partReceived", "label": "Received amount", "type": "number" }]
+    }
+  ]
+}

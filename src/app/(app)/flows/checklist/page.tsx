@@ -1,0 +1,388 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { ArrowRightLeftIcon, CheckIcon, CircleIcon, ClipboardPasteIcon, LinkIcon, PencilIcon, PlusIcon, Undo2Icon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar } from "@/components/avatar";
+import { DataTable, EmptyState, Field, PageHeader, Pill, Progress, Spinner } from "@/components/common";
+import { FilterBar, useFilters, type QuickDef } from "@/components/filters/filter-bar";
+import { BulkDialog, scheduleText, TaskDialog } from "@/components/checklist/task-dialogs";
+import { MoveDialog } from "@/components/move-dialog";
+import { checklistOwner, FREQ_LABEL } from "@/lib/checklist-shared";
+import { plannedDates } from "@/lib/checklist-schedule";
+import { applyFilters, downloadCsv, EMPTY_FILTER, toCsv, type FieldDef, type FilterState } from "@/lib/filters";
+import { CHECKLIST_FREQ, type ChecklistEntry, type ChecklistFreq, type ChecklistTask } from "@/lib/flow-types";
+import { addDays, fmtDate, weekdayName } from "@/lib/dates";
+import { useFlows } from "@/lib/flow-store";
+import { cn } from "@/lib/utils";
+
+interface Row { e: ChecklistEntry; t: ChecklistTask; covering: boolean; owner: string }
+
+const groupOf = (f: string) => CHECKLIST_FREQ.find((x) => x.id === f)?.group ?? "";
+
+export default function ChecklistPage() {
+  const { allow, peopleFor } = useFlows();
+  const [tab, setTab] = useState("mine");
+  const [fstate, setFstate] = useFilters("checklist:list", "mine");
+  const sees = peopleFor("checklist").length > 1;
+  return (
+    <>
+      <PageHeader help={{ id: "checklist", title: "All your repeating work in one place", text: "Daily, weekly, monthly and one-time tasks are all here. The buttons at the top are one-click filters (My tasks, Today, Pending, Overdue, Completed); open Filters for more — type, proof needed, department, dates. Tap the circle to tick a task; a task marked “Proof needed” asks for a link or a note. Late ticks count as not on time in the scorecard. Ticked by mistake? Undo within 30 minutes." }} title="Checklist" subtitle="Daily, non-daily and one-time tasks together — filter, add and tick right here." />
+      <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
+        <div className="mb-3 overflow-x-auto"><TabsList>
+          <TabsTrigger value="mine">Checklist</TabsTrigger>
+          {sees && <TabsTrigger value="team">Team today</TabsTrigger>}
+          {allow("checklist", "manage") && <TabsTrigger value="tasks">Task setup</TabsTrigger>}
+        </TabsList></div>
+        <TabsContent value="mine"><Unified state={fstate} onState={setFstate} /></TabsContent>
+        {sees && <TabsContent value="team"><TeamToday onOpen={(id) => { setFstate({ ...EMPTY_FILTER("pending"), conds: [{ id: "p1", field: "who", op: "is", value: id }] }); setTab("mine"); }} /></TabsContent>}
+        {allow("checklist", "manage") && <TabsContent value="tasks"><ManageTasks /></TabsContent>}
+      </Tabs>
+    </>
+  );
+}
+
+/** Every entry in reach, with the owner rule (buddy cover) applied. */
+function useRows() {
+  const { data, today } = useFlows();
+  return useMemo(() => {
+    const tasks = new Map((data?.checklistTasks ?? []).map((t) => [t.ctId, t]));
+    const abs = data?.absences ?? [];
+    const rows: Row[] = [];
+    for (const e of data?.checklistLog ?? []) {
+      const t = tasks.get(e.ctId);
+      if (!t || e.status === "Cancelled" || e.status === "Skipped") continue;
+      if (e.status === "Done") { rows.push({ e, t, covering: e.doneBy !== "" && e.doneBy !== e.doerId, owner: e.doneBy || e.doerId }); continue; }
+      const o = checklistOwner(e, t, abs, today);
+      rows.push({ e, t, covering: o.covering, owner: o.userId });
+    }
+    return rows;
+  }, [data, today]);
+}
+
+function Unified({ state, onState }: { state: FilterState; onState: (s: FilterState) => void }) {
+  const { data, meId, today, call, userName, optimistic, now, allow, peopleFor, inReach } = useFlows();
+  const rows = useRows();
+  const [proofFor, setProofFor] = useState<Row | null>(null);
+  const [busy, setBusy] = useState("");
+  const [addPick, setAdding] = useState<boolean | null>(null);
+  const wantAdd = useSearchParams().get("add") === "1";
+  const adding = addPick ?? (wantAdd && allow("checklist", "create"));
+  const [bulk, setBulk] = useState(false);
+  const [moving, setMoving] = useState<string[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const people = peopleFor("checklist");
+  const week = addDays(today, 7);
+
+  const depts = useMemo(() => [...new Set([...(data?.checklistTasks ?? []).map((t) => t.department), ...(data?.departments ?? [])].map((x) => x.trim()).filter(Boolean))].sort(), [data]);
+  const fields = useMemo<FieldDef<Row>[]>(() => [
+    { key: "who", label: "Person", type: "user", options: (data?.users ?? []).filter((u) => u.status === "Active").map((u) => ({ value: u.userId, label: u.name })), get: (r) => r.owner },
+    { key: "title", label: "Task", type: "text", get: (r) => r.t.title },
+    { key: "kind", label: "Type", type: "select", options: [{ value: "DC", label: "Daily" }, { value: "NDC", label: "Non-daily" }, { value: "OT", label: "One-time" }], get: (r) => groupOf(r.t.freq) },
+    { key: "freq", label: "How often", type: "select", options: CHECKLIST_FREQ.map((f) => ({ value: f.id, label: f.label })), get: (r) => r.t.freq },
+    { key: "proof", label: "Proof", type: "select", options: [{ value: "Y", label: "Needed" }, { value: "N", label: "Not needed" }], get: (r) => (r.t.proof === "Y" ? "Y" : "N") },
+    { key: "dept", label: "Department", type: "select", options: depts.map((d) => ({ value: d, label: d })), get: (r) => r.t.department },
+    { key: "status", label: "Status", type: "select", options: [{ value: "Pending", label: "Pending" }, { value: "Done", label: "Done" }], get: (r) => r.e.status },
+    { key: "due", label: "Due date", type: "date", get: (r) => r.e.plannedDate },
+    { key: "done", label: "Done on", type: "date", get: (r) => (r.e.status === "Done" ? r.e.actual.slice(0, 10) : "") },
+  ], [data?.users, depts]);
+  const quickFns = useMemo<Record<string, (r: Row) => boolean>>(() => ({
+    mine: (r) => r.owner === meId && r.e.status === "Pending" && r.e.plannedDate <= week,
+    today: (r) => r.e.plannedDate === today || (r.e.status === "Done" && r.e.actual.slice(0, 10) === today),
+    pending: (r) => r.e.status === "Pending" && r.e.plannedDate <= week,
+    overdue: (r) => r.e.status === "Pending" && r.e.plannedDate < today,
+    done: (r) => r.e.status === "Done",
+    all: () => true,
+  }), [meId, today, week]);
+  const count = (id: string) => rows.filter(quickFns[id]).length;
+  const quick: QuickDef[] = [
+    { id: "mine", label: "My tasks", count: count("mine") }, { id: "today", label: "Today", count: count("today") }, { id: "pending", label: "Pending", count: count("pending") },
+    { id: "overdue", label: "Overdue", count: count("overdue") }, { id: "done", label: "Completed" }, { id: "all", label: "All" },
+  ];
+  const shown = useMemo(() => applyFilters(rows, fields, state, { quick: quickFns, text: (r) => `${r.t.title} ${r.t.department} ${r.t.kra} ${userName(r.owner)}` })
+    .sort((a, b) => (a.e.status === "Done" ? 1 : 0) - (b.e.status === "Done" ? 1 : 0) || (a.e.status === "Done" ? b.e.actual.localeCompare(a.e.actual) : a.e.plannedDate.localeCompare(b.e.plannedDate) || a.t.title.localeCompare(b.t.title))), [rows, fields, state, quickFns, userName]);
+
+  const open = shown.filter((r) => r.e.status === "Pending");
+  const overdue = open.filter((r) => r.e.plannedDate < today);
+  const todays = open.filter((r) => r.e.plannedDate === today);
+  const coming = open.filter((r) => r.e.plannedDate > today);
+  const done = shown.filter((r) => r.e.status === "Done");
+  const mineToday = rows.filter((r) => r.owner === meId && (r.e.plannedDate === today || (r.e.status === "Done" && r.e.actual.slice(0, 10) === today)));
+  const mineDone = mineToday.filter((r) => r.e.status === "Done").length;
+  const pct = mineToday.length ? Math.round((mineDone / mineToday.length) * 100) : 100;
+  const canEdit = allow("checklist", "edit");
+  const mayTick = (r: Row) => canEdit && r.e.status === "Pending" && r.e.plannedDate <= today && (r.owner === meId || r.e.doerId === meId || allow("checklist", "manage") || inReach(r.owner, "checklist") && r.owner !== meId && allow("checklist", "edit"));
+  const canMove = allow("checklist", "assign");
+
+  async function tick(r: Row) {
+    if (r.t.proof === "Y") { setProofFor(r); return; }
+    // tick it on screen straight away; if the server refuses, put it back and say why
+    const back = optimistic("Checklist_Log", r.e as unknown as Record<string, unknown>, { ...r.e, status: "Done", actual: now(), doneBy: meId });
+    const res = await call("completeChecklist", { clId: r.e.clId });
+    if (!res.ok) { back(); toast.error(res.error || "Could not tick"); } else toast.success("Done", { action: { label: "Undo", onClick: () => undo(r.e.clId) } });
+  }
+  async function undo(clId: string) {
+    const res = await call("reopenChecklist", { clId });
+    if (!res.ok) toast.error(res.error || "Could not undo");
+  }
+  async function tickMany(ids: string[]) {
+    if (!ids.length) return;
+    setBusy("all");
+    const res = await call<{ done: number; skipped: unknown[] }>("completeChecklistMany", { clIds: ids });
+    setBusy("");
+    if (!res.ok) toast.error(res.error || "Failed"); else { toast.success(`${res.data!.done} ticked${res.data!.skipped.length ? ` · ${res.data!.skipped.length} left (need proof or not yours)` : ""}`); setPicked(new Set()); }
+  }
+  const toggle = (id: string) => setPicked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const pickedRows = open.filter((r) => picked.has(r.e.clId));
+  const allIds = open.map((r) => r.e.clId);
+
+  async function exportRows() {
+    const body = shown.map((r) => [r.t.title, FREQ_LABEL[r.t.freq], r.t.department, userName(r.owner), r.e.plannedDate, r.e.status, r.e.actual, r.t.proof === "Y" ? "Needed" : "", r.e.proof]);
+    downloadCsv("checklist.csv", toCsv(["Task", "How often", "Department", "Person", "Due", "Status", "Done at", "Proof needed", "Proof"], body));
+    await call("logExport", { module: "checklist", rows: shown.length, what: "Checklist" });
+  }
+
+  const list = (title: string, items: Row[], tone: "red" | "amber" | "blue" | "green") => items.length === 0 ? null : (
+    <section className="mb-4">
+      <h2 className="mb-1.5 flex items-center gap-2 text-sm font-semibold"><Pill tone={tone}>{title}</Pill><span className="text-muted-foreground">{items.length}</span></h2>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">{items.map((r) => (
+        <Item key={r.e.clId} r={r} showWho={people.length > 1} busy={busy === r.e.clId} canTick={mayTick(r)} onTick={() => tick(r)}
+          onUndo={r.e.status === "Done" && r.e.actual.slice(0, 10) === today && canEdit ? () => undo(r.e.clId) : undefined}
+          selected={picked.has(r.e.clId)} onSelect={r.e.status === "Pending" && (mayTick(r) || canMove) ? () => toggle(r.e.clId) : undefined} />
+      ))}</div>
+    </section>
+  );
+
+  return (
+    <>
+      {/* my progress today */}
+      <div className="mb-3 rounded-lg border bg-card p-3 shadow-[0_1px_1px_rgba(60,66,87,0.04),0_2px_5px_rgba(60,66,87,0.05)]">
+        <div className="mb-1.5 flex items-center justify-between text-sm"><span className="font-medium">My day · {mineDone} of {mineToday.length} done</span><span className="text-xs text-muted-foreground">{count("overdue") ? `${count("overdue")} overdue in view` : "nothing is overdue"}</span></div>
+        <Progress value={pct} />
+      </div>
+
+      {allow("checklist", "create") && <QuickAdd onMore={() => setAdding(true)} onBulk={() => setBulk(true)} />}
+
+      <FilterBar page="checklist:list" module="checklist" fields={fields} quick={quick} state={state} onChange={onState} shown={shown.length} total={rows.length} placeholder="Search task, department, person…" onExport={exportRows} />
+
+      {/* actions */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {open.length > 0 && <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" className="size-4 rounded border-input" checked={picked.size > 0 && picked.size === allIds.length} onChange={(e) => setPicked(e.target.checked ? new Set(allIds) : new Set())} /> Select all {open.length} shown</label>}
+        {picked.size > 0 && (
+          <>
+            <b className="text-sm">{picked.size} selected</b>
+            {canEdit && <Button size="sm" disabled={busy === "all"} onClick={() => tickMany(pickedRows.filter((r) => r.t.proof !== "Y" && r.e.plannedDate <= today).map((r) => r.e.clId))}>{busy === "all" ? <Spinner /> : <><CheckIcon /> Tick selected</>}</Button>}
+            {canMove && <Button size="sm" variant="outline" onClick={() => setMoving([...picked])}><ArrowRightLeftIcon /> Move / hand over</Button>}
+            <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear</Button>
+            <span className="text-xs text-muted-foreground">Tasks that need proof are ticked one by one.</span>
+          </>
+        )}
+      </div>
+
+      {shown.length === 0 && <EmptyState title={rows.length ? "Nothing matches" : "Nothing on your checklist"} hint={rows.length ? "Change the quick filter or clear the filters." : allow("checklist", "create") ? "Add a task above (or paste many) — it shows up on the right days automatically." : "Your manager has not given you any repeating tasks yet."} />}
+      {list("Overdue", overdue, "red")}
+      {list("Today", todays, "amber")}
+      {list("Coming up", coming, "blue")}
+      {list("Done", done, "green")}
+      {proofFor && <ProofDialog row={proofFor} onClose={() => setProofFor(null)} />}
+      {adding && <TaskDialog onClose={() => setAdding(false)} />}
+      {bulk && <BulkDialog onClose={() => setBulk(false)} />}
+      {moving && <MoveDialog kind="checklist" ids={moving} onClose={(ok) => { setMoving(null); if (ok) setPicked(new Set()); }} />}
+    </>
+  );
+}
+
+/** One-line new entry right on the page. */
+function QuickAdd({ onMore, onBulk }: { onMore: () => void; onBulk: () => void }) {
+  const { call, today, peopleFor, meId, allow } = useFlows();
+  const people = allow("checklist", "assign") ? peopleFor("checklist") : peopleFor("checklist").filter((u) => u.userId === meId);
+  const [title, setTitle] = useState("");
+  const [doer, setDoer] = useState("");
+  const [freq, setFreq] = useState<ChecklistFreq>("D");
+  const [start, setStart] = useState(today);
+  const [proof, setProof] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  async function add() {
+    setBusy(true); setErr("");
+    const r = await call<{ created: number }>("saveChecklistTask", { title, doerId: doer || meId, freq, startDate: start, proof: proof ? "Y" : "N" });
+    setBusy(false);
+    if (!r.ok) { setErr(r.error || "Could not add"); return; }
+    toast.success(`Added — ${r.data!.created} entr${r.data!.created === 1 ? "y" : "ies"} created`);
+    setTitle("");
+  }
+  return (
+    <div className="mb-3 rounded-lg border border-dashed bg-card p-3">
+      <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (title.trim()) add(); }}>
+        <div className="min-w-48 flex-[3]"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-title">New task</label><Input id="qa-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What has to be done?" /></div>
+        {people.length > 1 && <div className="w-36"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-who">Who</label><NativeSelect id="qa-who" value={doer || meId} onChange={(e) => setDoer(e.target.value)}>{people.map((u) => <option key={u.userId} value={u.userId}>{u.userId === meId ? "Me" : u.name}</option>)}</NativeSelect></div>}
+        <div className="w-36"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-freq">How often</label><NativeSelect id="qa-freq" value={freq} onChange={(e) => setFreq(e.target.value as ChecklistFreq)}>{CHECKLIST_FREQ.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</NativeSelect></div>
+        <div className="w-36"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-start">{freq === "O" ? "On" : "Starting"}</label><Input id="qa-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
+        <label className="flex h-9 items-center gap-1.5 text-sm"><input type="checkbox" className="h-4 w-4 rounded border-input" checked={proof} onChange={(e) => setProof(e.target.checked)} /> Proof needed</label>
+        <Button type="submit" disabled={busy || !title.trim()}>{busy ? <Spinner /> : <><PlusIcon /> Add</>}</Button>
+        <Button type="button" variant="ghost" onClick={onMore}>More options</Button>
+        {allow("checklist", "import") && <Button type="button" variant="ghost" onClick={onBulk} aria-label="Paste many tasks"><ClipboardPasteIcon /> Paste many</Button>}
+      </form>
+      {err && <p role="alert" className="mt-1.5 text-sm text-red-700">{err}</p>}
+    </div>
+  );
+}
+
+function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect }: { r: Row; showWho?: boolean; busy: boolean; canTick: boolean; onTick: () => void; onUndo?: () => void; selected?: boolean; onSelect?: () => void }) {
+  const { today, userName } = useFlows();
+  const done = r.e.status === "Done";
+  const late = !done && r.e.plannedDate < today;
+  const needsProof = r.t.proof === "Y";
+  return (
+    <div className={cn("flex items-center gap-3 rounded-lg border bg-card p-2.5", late && "border-red-200 bg-red-50/40", done && "opacity-75", selected && "border-primary bg-[#efeeff]/60")}>
+      {onSelect && <input type="checkbox" className="size-4 shrink-0 rounded border-input" checked={!!selected} onChange={onSelect} aria-label={`Select ${r.t.title}`} />}
+      <button
+        onClick={onTick} disabled={!canTick || done || busy} aria-label={done ? "Done" : `Mark done: ${r.t.title}`}
+        className={cn("flex size-9 shrink-0 items-center justify-center rounded-full border-2 transition-colors", done ? "border-emerald-500 bg-emerald-500 text-white" : canTick ? "border-primary/40 text-transparent hover:bg-primary/10 hover:text-primary" : "border-muted text-transparent")}
+      >
+        {busy ? <Spinner /> : done ? <CheckIcon className="size-5" /> : canTick ? <CheckIcon className="size-5" /> : <CircleIcon className="size-5 text-muted-foreground/40" />}
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className={cn("text-sm font-medium", done && "line-through")}>{r.t.title}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          {showWho && <span className="inline-flex items-center gap-1"><Avatar userId={r.owner} size={16} /><span className="font-medium text-foreground/80">{userName(r.owner)}</span></span>}
+          <Pill tone={r.t.freq === "D" ? "blue" : r.t.freq === "O" ? "violet" : "gray"}>{FREQ_LABEL[r.t.freq]}</Pill>
+          {r.t.department && <span>{r.t.department}</span>}
+          <span className={cn(late && "font-medium text-[#a41c4e]")}>· {late ? `was due ${weekdayName(r.e.plannedDate).slice(0, 3)} ${fmtDate(r.e.plannedDate)}` : done ? `done ${r.e.actual.slice(0, 10) === today ? "" : fmtDate(r.e.actual.slice(0, 10)) + " "}${r.e.actual.slice(11)}${r.e.actual.slice(0, 10) > r.e.plannedDate ? " (late)" : ""}` : fmtDate(r.e.plannedDate)}</span>
+          {r.e.origDate && r.e.origDate !== r.e.plannedDate && <span title="Moved from its first date">· moved from {fmtDate(r.e.origDate)}</span>}
+          {r.covering && <Pill tone="violet">{done ? `for ${userName(r.e.doerId)}` : `covering ${userName(r.e.doerId)}`}</Pill>}
+          {needsProof && !done && <Pill tone="amber"><LinkIcon className="mr-0.5 inline size-3" />Proof needed</Pill>}
+          {r.e.proof && /^https?:\/\//.test(r.e.proof) && <a href={r.e.proof} target="_blank" rel="noopener noreferrer" className="text-primary underline">proof</a>}
+          {r.e.proof && !/^https?:\/\//.test(r.e.proof) && <span title={r.e.proof}>· proof: {r.e.proof.slice(0, 40)}</span>}
+        </div>
+      </div>
+      {onUndo && <button onClick={onUndo} aria-label="Undo" className="rounded p-1.5 text-muted-foreground hover:bg-muted"><Undo2Icon className="size-4" /></button>}
+    </div>
+  );
+}
+
+function ProofDialog({ row, onClose }: { row: Row; onClose: () => void }) {
+  const { call } = useFlows();
+  const [proof, setProof] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  async function save() {
+    setBusy(true); setErr("");
+    const r = await call("completeChecklist", { clId: row.e.clId, proof, remarks });
+    setBusy(false);
+    if (!r.ok) { setErr(r.error || "Could not save"); return; }
+    toast.success("Done");
+    onClose();
+  }
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{row.t.title}</DialogTitle></DialogHeader>
+        <div className="grid gap-3">
+          <Field label="Proof *" hint="Paste a link (Drive, screenshot, invoice…) or write a short note."><Input value={proof} onChange={(e) => setProof(e.target.value)} autoFocus /></Field>
+          <Field label="Remarks (optional)"><Textarea rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)} /></Field>
+          {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
+        </div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy || !proof.trim()}>{busy ? <Spinner /> : "Mark done"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TeamToday({ onOpen }: { onOpen: (id: string) => void }) {
+  const { data, today, userName } = useFlows();
+  const rows = useMemo(() => {
+    const tasks = new Map((data?.checklistTasks ?? []).map((t) => [t.ctId, t]));
+    const abs = data?.absences ?? [];
+    const by = new Map<string, { open: number; overdue: number; today: number; done: number }>();
+    for (const e of data?.checklistLog ?? []) {
+      const t = tasks.get(e.ctId);
+      if (!t || e.status === "Cancelled" || e.status === "Skipped") continue;
+      if (e.status === "Done") { if (e.actual.slice(0, 10) !== today) continue; const c = by.get(e.doneBy || e.doerId) ?? by.set(e.doneBy || e.doerId, { open: 0, overdue: 0, today: 0, done: 0 }).get(e.doneBy || e.doerId)!; c.done++; continue; }
+      if (e.plannedDate > today) continue;
+      const who = checklistOwner(e, t, abs, today).userId;
+      const c = by.get(who) ?? by.set(who, { open: 0, overdue: 0, today: 0, done: 0 }).get(who)!;
+      c.open++;
+      if (e.plannedDate < today) c.overdue++; else c.today++;
+    }
+    return [...by.entries()].map(([id, c]) => ({ id, ...c })).sort((a, b) => b.overdue - a.overdue || b.open - a.open);
+  }, [data, today]);
+  if (rows.length === 0) return <EmptyState title="No checklist work yet" hint="Add tasks in “All tasks”." />;
+  return (
+    <DataTable head={["Person", "Done today", "Still open today", "Older & overdue", ""]}>
+      {rows.map((r) => (
+        <tr key={r.id}>
+          <td className="font-medium">{userName(r.id)}</td><td className="tabular-nums">{r.done}</td><td className="tabular-nums">{r.today}</td>
+          <td className={cn("tabular-nums", r.overdue && "font-medium text-red-700")}>{r.overdue}</td>
+          <td className="text-right"><button className="text-xs text-primary underline" onClick={() => onOpen(r.id)}>Open</button></td>
+        </tr>
+      ))}
+    </DataTable>
+  );
+}
+
+function ManageTasks() {
+  const { data, userName, today, call } = useFlows();
+  const [q, setQ] = useState("");
+  const [who, setWho] = useState("");
+  const [freq, setFreq] = useState("");
+  const [status, setStatus] = useState("Active");
+  const [edit, setEdit] = useState<ChecklistTask | "new" | null>(null);
+  const [bulk, setBulk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { peopleFor } = useFlows();
+  const people = peopleFor("checklist");
+  const tasks = (data?.checklistTasks ?? [])
+    .filter((t) => (!who || t.doerId === who) && (!freq || t.freq === freq) && (!status || t.status === status) && (!q || `${t.title} ${t.department}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => userName(a.doerId).localeCompare(userName(b.doerId)) || a.title.localeCompare(b.title));
+  const cal = useMemo(() => ({ off: new Set(String(data?.settings?.WEEKLY_OFF ?? "0").split(",").filter((x) => /^[0-6]$/.test(x.trim())).map(Number)), holidays: new Set((data?.holidays ?? []).filter((h) => !h.flowId).map((h) => h.date)) }), [data]);
+  const next = (t: ChecklistTask) => plannedDates(t, today, addDays(today, 40), cal)[0] ?? "";
+
+  async function generate() {
+    setBusy(true);
+    const r = await call<{ created: number }>("generateChecklist", {});
+    setBusy(false);
+    if (!r.ok) toast.error(r.error || "Failed"); else toast.success(`${r.data!.created} entr${r.data!.created === 1 ? "y" : "ies"} created`);
+  }
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-6">
+        <Input className="col-span-2 h-10" placeholder="Search task or department…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <NativeSelect value={who} onChange={(e) => setWho(e.target.value)} aria-label="Doer"><option value="">Everyone</option>{people.map((u) => <option key={u.userId} value={u.userId}>{u.name}</option>)}</NativeSelect>
+        <NativeSelect value={freq} onChange={(e) => setFreq(e.target.value)} aria-label="Frequency"><option value="">Any frequency</option>{CHECKLIST_FREQ.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</NativeSelect>
+        <NativeSelect value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status"><option value="">Any status</option><option>Active</option><option>Paused</option></NativeSelect>
+        <div className="flex gap-2"><Button size="sm" className="h-10 flex-1" onClick={() => setEdit("new")}><PlusIcon /> Add</Button><Button size="sm" variant="outline" className="h-10" onClick={() => setBulk(true)} aria-label="Paste many"><ClipboardPasteIcon /></Button></div>
+      </div>
+      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{tasks.length} task{tasks.length === 1 ? "" : "s"}</span>
+        <button className="underline" onClick={generate} disabled={busy}>{busy ? "Working…" : "Create coming entries now"}</button>
+      </div>
+      {tasks.length === 0 ? <EmptyState title="No tasks match" hint="Add a task, or paste your list from the Drive sheet." /> : (
+        <DataTable head={["Task", "Doer", "Buddy", "How often", "Next", "Proof", ""]}>
+          {tasks.slice(0, 300).map((t) => (
+            <tr key={t.ctId} className={cn(t.status !== "Active" && "opacity-60")}>
+              <td className="max-w-72"><span className="line-clamp-2 font-medium">{t.title}</span>{t.department && <span className="text-xs text-muted-foreground">{t.department}</span>}</td>
+              <td>{userName(t.doerId)}</td><td className="text-muted-foreground">{t.backupId ? userName(t.backupId) : "—"}</td>
+              <td className="text-xs" title={scheduleText(t.freq, t.startDate)}>{FREQ_LABEL[t.freq]}{t.status !== "Active" && <Pill tone="gray" className="ml-1">{t.status}</Pill>}</td>
+              <td className="whitespace-nowrap text-xs">{next(t) ? fmtDate(next(t)) : "—"}</td>
+              <td>{t.proof === "Y" ? "Yes" : ""}</td>
+              <td><button aria-label={`Edit ${t.title}`} onClick={() => setEdit(t)} className="rounded p-1 text-muted-foreground hover:bg-muted"><PencilIcon className="size-3.5" /></button></td>
+            </tr>
+          ))}
+        </DataTable>
+      )}
+      {tasks.length > 300 && <p className="mt-2 text-xs text-muted-foreground">Showing 300 of {tasks.length} — narrow the filters.</p>}
+      {edit && <TaskDialog task={edit === "new" ? undefined : edit} onClose={() => setEdit(null)} />}
+      {bulk && <BulkDialog onClose={() => setBulk(false)} />}
+    </>
+  );
+}

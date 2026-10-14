@@ -1,0 +1,40 @@
+{
+  "name": "CRM Advance Order",
+  "description": "From the Drive sheet “CRM Advance FMS Panel”: quotation → order punch → part payment → packing → final payment → dispatch → feedback.",
+  "anchorField": "orderDate",
+  "titleFields": ["client", "orderId"],
+  "groupField": "",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 25,
+  "openLabel": "In progress",
+  "doneLabel": "Closed",
+  "fields": [
+    { "key": "client", "label": "Client name", "type": "text", "required": true },
+    { "key": "orderId", "label": "Quotation / Order ID", "type": "text", "unique": true },
+    { "key": "orderDate", "label": "Order date", "type": "datetime", "required": true },
+    { "key": "orderValue", "label": "Order value", "type": "number" }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Ask customer details and send Estimation / Quotation form", "assigneeName": "Riya", "how": "Call / WhatsApp", "whenText": "2 working days after the order date", "rule": { "base": "anchor", "offsetDays": 2 } },
+    { "stepId": "s2", "name": "Order punch", "assigneeName": "Riya", "how": "From quotation", "whenText": "2 working days after the quotation", "rule": { "base": "prev_actual", "offsetDays": 2 } },
+    {
+      "stepId": "s3", "name": "Part payment before packing", "assigneeName": "Riya", "how": "Bank / UPI", "whenText": "2 working days after order punch",
+      "rule": { "base": "prev_actual", "offsetDays": 2 }, "completionFields": [{ "key": "partPayment", "label": "Part payment received", "type": "number", "required": true }]
+    },
+    { "stepId": "s4", "name": "Send order for packing", "assigneeName": "Riya", "how": "WhatsApp group", "whenText": "1 working day after part payment", "rule": { "base": "prev_actual", "offsetDays": 1 } },
+    {
+      "stepId": "s5", "name": "Confirm final payment before dispatch", "assigneeName": "Riya", "how": "Call / bank statement", "whenText": "7 working days after sending for packing",
+      "rule": { "base": "prev_actual", "offsetDays": 7 }, "escalateAfterMinutes": 240, "completionFields": [{ "key": "finalPayment", "label": "Final payment received", "type": "number", "required": true }]
+    },
+    {
+      "stepId": "s6", "name": "Order dispatch and inform client", "assigneeName": "Riya", "how": "Transporter + WhatsApp", "whenText": "1 working day after final payment",
+      "rule": { "base": "prev_actual", "offsetDays": 1 }, "completionFields": [{ "key": "docket", "label": "Docket / LR no", "type": "text" }]
+    },
+    {
+      "stepId": "s7", "name": "Feedback", "assigneeName": "Riya", "how": "Call", "whenText": "8 working days after dispatch",
+      "rule": { "base": "prev_actual", "offsetDays": 8 }, "completionFields": [{ "key": "feedback", "label": "Client feedback", "type": "textarea" }]
+    }
+  ]
+}

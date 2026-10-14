@@ -1,0 +1,30 @@
+{
+  "name": "Leave Request",
+  "description": "From the Drive sheet “Leave Request” (Admin Control): ask for leave, manager decides, absence + backup are recorded.",
+  "anchorField": "startDate",
+  "titleFields": ["employee", "leaveType"],
+  "groupField": "leaveType",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 2,
+  "openLabel": "Waiting",
+  "doneLabel": "Decided",
+  "fields": [
+    { "key": "employee", "label": "Employee", "type": "text", "required": true },
+    { "key": "leaveType", "label": "Leave type", "type": "select", "required": true, "options": ["Full Day", "First Half Day", "Second Half Day", "Short Leave"] },
+    { "key": "startDate", "label": "From", "type": "date", "required": true },
+    { "key": "endDate", "label": "To", "type": "date", "required": true },
+    { "key": "days", "label": "Days", "type": "number" },
+    { "key": "reason", "label": "Reason", "type": "textarea" }
+  ],
+  "steps": [
+    {
+      "stepId": "s1", "name": "Approve or reject the leave", "assigneeName": "Vikas", "how": "Admin Control", "whenText": "Within 4 hours of the request; at the latest the working day before the leave",
+      "rule": { "base": "created", "offsetDays": 0, "offsetHours": 4 }, "escalateAfterMinutes": 240,
+      "completionFields": [{ "key": "decision", "label": "Decision", "type": "select", "required": true, "options": ["Approved", "Rejected", "Short Leave Accepted"] }]
+    },
+    { "stepId": "s2", "name": "If approved: mark the absence and the backup person in Absence & Holidays", "assigneeName": "Vikas", "how": "This app", "whenText": "1 hour after the decision", "sequential": true, "rule": { "base": "prev_actual", "offsetDays": 0, "offsetHours": 1 } },
+    { "stepId": "s3", "name": "Update the attendance sheet", "assigneeName": "Vikas", "how": "Attendance system", "whenText": "The working day after the leave ends", "rule": { "base": "field", "field": "endDate", "offsetDays": 1 } }
+  ]
+}

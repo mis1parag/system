@@ -1,0 +1,43 @@
+{
+  "name": "Vendor Payment Approval",
+  "description": "Invoice check, approval for big amounts, payment before the due date.",
+  "anchorField": "dueDate",
+  "titleFields": ["invoice", "vendor"],
+  "groupField": "vendor",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 7,
+  "openLabel": "In process",
+  "doneLabel": "Paid",
+  "fields": [
+    { "key": "invoice", "label": "Invoice no", "type": "text", "required": true, "unique": true },
+    { "key": "vendor", "label": "Vendor", "type": "text", "required": true },
+    { "key": "amount", "label": "Amount", "type": "number", "required": true },
+    { "key": "dueDate", "label": "Payment due date", "type": "date", "required": true },
+    { "key": "invoiceLink", "label": "Invoice link", "type": "url" }
+  ],
+  "steps": [
+    {
+      "stepId": "s1", "name": "Verify invoice with PO / GRN", "assigneeName": "Accounts", "how": "Sheet", "whenText": "3 working days before the due date",
+      "rule": { "base": "anchor", "offsetDays": -3 },
+      "completionFields": [
+        { "key": "grn", "label": "GRN no", "type": "text", "required": true },
+        { "key": "matched", "label": "Matches PO", "type": "checkbox" }
+      ]
+    },
+    {
+      "stepId": "s2", "name": "Director approval", "assigneeName": "Director", "how": "WhatsApp", "whenText": "1 working day after verification (only above 50,000)",
+      "rule": { "base": "prev_actual", "offsetDays": 1 }, "sequential": true, "condition": { "field": "amount", "op": "gt", "value": "50000" }
+    },
+    {
+      "stepId": "s3", "name": "Release payment", "assigneeName": "Accounts", "how": "Bank portal", "whenText": "4 PM on the due date",
+      "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "16:00" }, "escalateAfterMinutes": 60,
+      "completionFields": [{ "key": "utr", "label": "UTR / reference", "type": "text", "required": true }]
+    },
+    {
+      "stepId": "s4", "name": "Send payment advice to vendor", "assigneeName": "Accounts", "how": "Mail", "whenText": "1 working day after payment",
+      "rule": { "base": "prev_actual", "offsetDays": 1 }
+    }
+  ]
+}

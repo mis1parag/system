@@ -1,0 +1,37 @@
+{
+  "name": "Amazon FBA FMS",
+  "description": "From the Drive sheet “AMAZON FBA FMS SHEET”: vehicle, stock check, appointment coordination, dispatch, delivery and POD, reconciliation with the invoice.",
+  "anchorField": "appointment",
+  "titleFields": ["shipment", "location"],
+  "groupField": "location",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "In progress",
+  "doneLabel": "Reconciled",
+  "fields": [
+    { "key": "shipment", "label": "Shipment ID", "type": "text", "required": true, "unique": true },
+    { "key": "location", "label": "Delivery location", "type": "text", "required": true },
+    { "key": "boxes", "label": "Boxes", "type": "number" },
+    { "key": "vehicle", "label": "Vehicle", "type": "text" },
+    { "key": "qty", "label": "Quantity", "type": "number" },
+    { "key": "appointment", "label": "Appointment date", "type": "datetime", "required": true },
+    { "key": "pickup", "label": "Pickup date & time", "type": "datetime", "required": true },
+    { "key": "mode", "label": "Mode of order", "type": "select", "options": ["Amazon FBA", "Flipkart", "Blinkit", "Instamart", "Dmart"] }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Coordinate with transportation about the vehicle", "assigneeName": "Kunal", "how": "Call", "whenText": "2 working days before pickup", "rule": { "base": "field", "field": "pickup", "offsetDays": -2 } },
+    { "stepId": "s2", "name": "Ask Pawan to check that all shipment material is in stock", "assigneeName": "Kunal", "how": "Call", "whenText": "4 working days before the appointment", "rule": { "base": "anchor", "offsetDays": -4 } },
+    { "stepId": "s3", "name": "Coordinate with the logistics partner on the appointment date for driver / vehicle details", "assigneeName": "Kunal", "how": "Call", "whenText": "10 AM on the appointment date", "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "10:00" } },
+    { "stepId": "s4", "name": "Dispatch material", "assigneeName": "Pawan", "how": "Checklist", "whenText": "At the pickup time", "rule": { "base": "field", "field": "pickup", "offsetDays": 0 }, "completionFields": [{ "key": "docket", "label": "Docket / LR no", "type": "text" }] },
+    {
+      "stepId": "s5", "name": "Confirm delivery with the logistics partner and take POD", "assigneeName": "Kunal", "how": "Call", "whenText": "1 working day after the appointment",
+      "rule": { "base": "anchor", "offsetDays": 1 }, "completionFields": [{ "key": "pod", "label": "POD link", "type": "url" }]
+    },
+    {
+      "stepId": "s6", "name": "Reconcile material received on the Amazon portal with the invoice", "assigneeName": "Rahul", "how": "Manual check", "whenText": "14 working days after the appointment",
+      "rule": { "base": "anchor", "offsetDays": 14 }, "completionFields": [{ "key": "reconcile", "label": "Reconciliation note (short / excess)", "type": "textarea" }]
+    }
+  ]
+}

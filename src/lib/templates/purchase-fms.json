@@ -1,0 +1,31 @@
+{
+  "name": "Purchase FMS",
+  "description": "From the Drive sheet “PURCHASE FMS Sheet”: generate the PO, issue it and get delivery confirmation, follow up the day before delivery, receive the material at the gate.",
+  "anchorField": "deliveryDate",
+  "titleFields": ["po", "vendor"],
+  "groupField": "vendor",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "Awaiting material",
+  "doneLabel": "Received",
+  "fields": [
+    { "key": "po", "label": "PO number", "type": "text", "required": true, "unique": true },
+    { "key": "vendor", "label": "Vendor name", "type": "text", "required": true },
+    { "key": "item", "label": "Item name", "type": "text", "required": true },
+    { "key": "qty", "label": "Quantity", "type": "number", "required": true },
+    { "key": "leadTime", "label": "Lead time (days)", "type": "number" },
+    { "key": "rate", "label": "Rate (Rs)", "type": "number" },
+    { "key": "deliveryDate", "label": "Delivery date (PO date + lead time)", "type": "date", "required": true }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Generate PO", "assigneeName": "Kunal", "how": "Tally / ERP", "whenText": "Whenever needed (done when the entry is added)", "rule": { "base": "none" }, "autoDone": true },
+    { "stepId": "s2", "name": "Issue PO and get delivery confirmation", "assigneeName": "Shivani", "how": "Call / WhatsApp", "whenText": "3 hours after the PO", "rule": { "base": "created", "offsetDays": 0, "offsetHours": 3 }, "reminderMinutes": 30 },
+    { "stepId": "s3", "name": "Follow up with vendor", "assigneeName": "Shivani", "how": "Call / WhatsApp", "whenText": "1 working day before the delivery date (T-1)", "rule": { "base": "anchor", "offsetDays": -1 } },
+    {
+      "stepId": "s4", "name": "Receive material", "assigneeName": "Shivani", "how": "Gate checklist", "whenText": "On the delivery date (T)",
+      "rule": { "base": "anchor", "offsetDays": 0 }, "escalateAfterMinutes": 120, "completionFields": [{ "key": "receivedQty", "label": "Quantity received", "type": "number", "required": true }]
+    }
+  ]
+}

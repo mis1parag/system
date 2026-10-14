@@ -1,0 +1,44 @@
+{
+  "name": "Purchase PO to Accounts",
+  "description": "From the Drive sheets “Reconcile FMS” and “PURCHASE FMS Sheet - ADVANCED MIS”: generate PO, issue to vendor, follow up, receive, QC, return, store, accounts.",
+  "anchorField": "deliveryDate",
+  "titleFields": ["po", "vendor"],
+  "groupField": "vendor",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "In progress",
+  "doneLabel": "Completed",
+  "fields": [
+    { "key": "po", "label": "PO number", "type": "text", "required": true, "unique": true },
+    { "key": "vendor", "label": "Vendor name", "type": "text", "required": true },
+    { "key": "item", "label": "Item name", "type": "text", "required": true },
+    { "key": "qty", "label": "Quantity", "type": "number", "required": true },
+    { "key": "rate", "label": "Rate (Rs)", "type": "number" },
+    { "key": "deliveryDate", "label": "Delivery date (PO date + lead time)", "type": "date", "required": true },
+    { "key": "returnNeeded", "label": "Material to be returned", "type": "checkbox" }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Generate PO", "assigneeName": "Purchase Assistant", "how": "Tally / ERP", "whenText": "Whenever needed (done when the entry is added)", "rule": { "base": "none" }, "autoDone": true },
+    { "stepId": "s2", "name": "Issue PO to supplier and get delivery confirmation", "assigneeName": "Manish", "how": "Email and phone", "whenText": "1 hour after the PO", "rule": { "base": "created", "offsetDays": 0, "offsetHours": 1 } },
+    { "stepId": "s3", "name": "Follow up with supplier", "assigneeName": "Manish", "how": "Email and phone", "whenText": "2 working days before the delivery date", "rule": { "base": "anchor", "offsetDays": -2 }, "reminderMinutes": 120 },
+    {
+      "stepId": "s4", "name": "Receive material", "assigneeName": "Purchase Assistant", "how": "Gate checklist 3A", "whenText": "On the delivery date",
+      "rule": { "base": "anchor", "offsetDays": 0 }, "escalateAfterMinutes": 120, "completionFields": [{ "key": "receivedQty", "label": "Quantity received", "type": "number", "required": true }]
+    },
+    {
+      "stepId": "s5", "name": "Quality and quantity check", "assigneeName": "Purchase Assistant", "how": "QC checklist", "whenText": "1 hour after receiving",
+      "rule": { "base": "prev_actual", "offsetDays": 0, "offsetHours": 1 }, "completionFields": [{ "key": "qc", "label": "QC result", "type": "select", "required": true, "options": ["Passed", "Partly rejected", "Rejected"] }]
+    },
+    {
+      "stepId": "s6", "name": "Return material", "assigneeName": "Purchase Assistant", "how": "Return checklist", "whenText": "1 hour after QC (only when “Material to be returned” is ticked on the entry)",
+      "rule": { "base": "prev_actual", "offsetDays": 0, "offsetHours": 1 }, "condition": { "field": "returnNeeded", "op": "filled" }
+    },
+    { "stepId": "s7", "name": "Store material", "assigneeName": "Store Assistant", "how": "Material-store checklist", "whenText": "Next day by 10 AM after delivery", "rule": { "base": "anchor", "offsetDays": 1, "timeOfDay": "10:00" } },
+    {
+      "stepId": "s8", "name": "Accounts process", "assigneeName": "Accountant", "how": "PO-accounts checklist", "whenText": "3 working days after delivery",
+      "rule": { "base": "anchor", "offsetDays": 3 }, "completionFields": [{ "key": "billNo", "label": "Vendor bill no", "type": "text" }]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "Purchase Indent to PO",
+  "description": "From the Drive sheet “Reconcile FMS” (Indent tab): indent → stock check → quotations → terms → approval → raise all POs.",
+  "anchorField": "raisedOn",
+  "titleFields": ["indent"],
+  "groupField": "",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 14,
+  "openLabel": "In progress",
+  "doneLabel": "POs raised",
+  "fields": [
+    { "key": "indent", "label": "Indent number", "type": "text", "required": true, "unique": true },
+    { "key": "items", "label": "Number of items", "type": "number" },
+    { "key": "raisedOn", "label": "Indent raised on", "type": "datetime", "required": true }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Generate indent", "assigneeName": "Purchase Assistant", "how": "Tally / ERP", "whenText": "Whenever needed (done when the entry is added)", "rule": { "base": "none" }, "autoDone": true },
+    { "stepId": "s2", "name": "Material not available — store check", "assigneeName": "Store Assistant", "how": "Store checklist", "whenText": "1 hour after the indent", "rule": { "base": "created", "offsetDays": 0, "offsetHours": 1 } },
+    { "stepId": "s3", "name": "Provide whatever is required", "assigneeName": "Store Incharge", "how": "Material P checklist", "whenText": "1 hour after the store check", "rule": { "base": "prev_actual", "offsetDays": 0, "offsetHours": 1 } },
+    {
+      "stepId": "s4", "name": "Get 3 quotations", "assigneeName": "Purchase Assistant", "how": "Quotation form", "whenText": "6 working days after the previous step",
+      "rule": { "base": "prev_actual", "offsetDays": 6 }, "completionFields": [{ "key": "quotes", "label": "Comparison sheet link", "type": "url" }]
+    },
+    { "stepId": "s5", "name": "Finalise terms", "assigneeName": "Purchase Assistant", "how": "FT checklist", "whenText": "2 working days after the quotations", "rule": { "base": "prev_actual", "offsetDays": 2 } },
+    { "stepId": "s6", "name": "Get approval", "assigneeName": "Purchase Assistant", "how": "From manager", "whenText": "2 working days after finalising terms", "rule": { "base": "prev_actual", "offsetDays": 2 }, "escalateAfterMinutes": 240 },
+    { "stepId": "s7", "name": "Generate all POs", "assigneeName": "Purchase Assistant", "how": "Tally / ERP and checklist", "whenText": "Next working day by 10 AM after approval", "rule": { "base": "prev_actual", "offsetDays": 1, "timeOfDay": "10:00" } }
+  ]
+}

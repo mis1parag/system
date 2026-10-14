@@ -1,0 +1,34 @@
+{
+  "name": "Customer Complaint Resolution",
+  "description": "Acknowledge fast, investigate, resolve, and call the customer back.",
+  "anchorField": "reported",
+  "titleFields": ["ticket", "customer"],
+  "groupField": "severity",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 3,
+  "openLabel": "Open",
+  "doneLabel": "Resolved",
+  "fields": [
+    { "key": "ticket", "label": "Ticket no", "type": "text", "required": true, "unique": true },
+    { "key": "customer", "label": "Customer", "type": "text", "required": true },
+    { "key": "phone", "label": "Customer phone", "type": "phone" },
+    { "key": "issue", "label": "Issue", "type": "textarea", "required": true },
+    { "key": "severity", "label": "Severity", "type": "select", "required": true, "options": ["High", "Medium", "Low"] },
+    { "key": "reported", "label": "Reported at", "type": "datetime", "required": true }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Acknowledge to the customer", "assigneeName": "Support", "how": "Call / WhatsApp", "whenText": "Within 2 hours of the complaint", "rule": { "base": "anchor", "offsetDays": 0, "offsetHours": 2 }, "reminderMinutes": 30 },
+    {
+      "stepId": "s2", "name": "Investigate root cause", "assigneeName": "Support", "how": "Internal", "whenText": "1 working day after acknowledgement",
+      "rule": { "base": "prev_actual", "offsetDays": 1 }, "completionFields": [{ "key": "cause", "label": "Root cause", "type": "textarea", "required": true }]
+    },
+    { "stepId": "s3", "name": "Resolve and reply", "assigneeName": "Support", "how": "Mail / Call", "whenText": "1 working day after investigation", "rule": { "base": "prev_actual", "offsetDays": 1 }, "escalateAfterMinutes": 120 },
+    {
+      "stepId": "s4", "name": "Customer satisfaction call", "assigneeName": "Support", "how": "Call", "whenText": "2 working days after resolution",
+      "rule": { "base": "prev_actual", "offsetDays": 2 },
+      "completionFields": [{ "key": "csat", "label": "Customer satisfied?", "type": "select", "required": true, "options": ["Yes", "No", "Not reachable"] }]
+    }
+  ]
+}

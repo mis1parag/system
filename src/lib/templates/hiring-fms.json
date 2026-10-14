@@ -1,0 +1,38 @@
+{
+  "name": "Hiring FMS",
+  "description": "From the Drive sheet “HR Hiring FMS”: telephonic interview, mock interview, verification, offer letter and joining date.",
+  "anchorField": "applied",
+  "titleFields": ["candidate", "post"],
+  "groupField": "post",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 14,
+  "openLabel": "In hiring",
+  "doneLabel": "Offered",
+  "fields": [
+    { "key": "candidate", "label": "Candidate name", "type": "text", "required": true },
+    { "key": "contact", "label": "Contact no.", "type": "phone", "required": true },
+    { "key": "post", "label": "Post / Department", "type": "text", "required": true },
+    { "key": "applied", "label": "Date of application", "type": "date", "required": true },
+    { "key": "resume", "label": "Resume link", "type": "url" }
+  ],
+  "steps": [
+    {
+      "stepId": "s1", "name": "Telephonic interview", "assigneeName": "Kunal", "how": "Call", "whenText": "3 working days after the application",
+      "rule": { "base": "anchor", "offsetDays": 3 }, "completionFields": [{ "key": "move1", "label": "Move ahead?", "type": "select", "required": true, "options": ["Yes", "No"] }]
+    },
+    {
+      "stepId": "s2", "name": "Mock interview", "assigneeName": "Kunal", "how": "Face to face", "whenText": "4 working days after the telephonic interview",
+      "rule": { "base": "prev_actual", "offsetDays": 4 }, "sequential": true, "completionFields": [{ "key": "move2", "label": "Move ahead?", "type": "select", "required": true, "options": ["Yes", "No"] }]
+    },
+    {
+      "stepId": "s3", "name": "Verification", "assigneeName": "Sapna", "how": "Document check", "whenText": "2 working days after the mock interview",
+      "rule": { "base": "prev_actual", "offsetDays": 2 }, "sequential": true, "completionFields": [{ "key": "move3", "label": "Move ahead?", "type": "select", "required": true, "options": ["Yes", "No"] }]
+    },
+    {
+      "stepId": "s4", "name": "Offer letter / give joining date", "assigneeName": "Sapna", "how": "WhatsApp or email", "whenText": "2 working days after verification",
+      "rule": { "base": "prev_actual", "offsetDays": 2 }, "sequential": true, "completionFields": [{ "key": "joining", "label": "Joining date", "type": "date" }]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "name": "Employee Exit",
+  "description": "From the Drive sheet “Employee Exist”: notice, handover of work and clients, assets back, access removed, FNF, payslip and experience letter.",
+  "anchorField": "lastDay",
+  "titleFields": ["employee", "department"],
+  "groupField": "department",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 10,
+  "openLabel": "Exit in progress",
+  "doneLabel": "Exit completed",
+  "fields": [
+    { "key": "employee", "label": "Employee", "type": "text", "required": true },
+    { "key": "department", "label": "Department", "type": "text", "required": true },
+    { "key": "email", "label": "Email ID", "type": "text" },
+    { "key": "lastDay", "label": "Last working day", "type": "date", "required": true },
+    { "key": "handoverTo", "label": "Work handed over to", "type": "text" },
+    { "key": "reason", "label": "Resignation / termination note", "type": "textarea" }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Accept resignation and confirm the last working day", "assigneeName": "Vikas", "how": "Mail", "whenText": "Within 4 hours of the entry", "rule": { "base": "created", "offsetDays": 0, "offsetHours": 4 } },
+    {
+      "stepId": "s2", "name": "Hand over ongoing work, clients and key responsibilities", "assigneeName": "Vikas", "how": "Handover note", "whenText": "2 working days before the last day",
+      "rule": { "base": "anchor", "offsetDays": -2 },
+      "completionFields": [{ "key": "handoverNote", "label": "What was handed over, and to whom", "type": "textarea", "required": true }]
+    },
+    {
+      "stepId": "s3", "name": "Collect assets: phone, SIM, laptop, other", "assigneeName": "Vikas", "how": "Asset register", "whenText": "On the last working day",
+      "rule": { "base": "anchor", "offsetDays": 0 },
+      "completionFields": [{ "key": "assets", "label": "Assets returned", "type": "select", "required": true, "options": ["All returned", "Some pending", "No assets issued"] }]
+    },
+    {
+      "stepId": "s4", "name": "Remove access: email, system logins, internal tools", "assigneeName": "Chirag", "how": "Checklist - MIS", "whenText": "6 PM on the last working day",
+      "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "18:00" }, "escalateAfterMinutes": 120,
+      "completionFields": [
+        { "key": "emailReset", "label": "Email password changed", "type": "checkbox" },
+        { "key": "laptopReset", "label": "Laptop password changed", "type": "checkbox" },
+        { "key": "toolsRemoved", "label": "Tool access removed", "type": "checkbox" }
+      ]
+    },
+    { "stepId": "s5", "name": "Remove assigned checklist tasks and scorecard", "assigneeName": "Chirag", "how": "Checklist - MIS", "whenText": "The working day after the last day", "rule": { "base": "anchor", "offsetDays": 1 } },
+    {
+      "stepId": "s6", "name": "Full and final settlement", "assigneeName": "Rahul", "how": "Bank", "whenText": "3 working days after the last day",
+      "rule": { "base": "anchor", "offsetDays": 3 }, "completionFields": [{ "key": "fnfAmount", "label": "FNF amount paid", "type": "number", "required": true }]
+    },
+    { "stepId": "s7", "name": "Send payslip and experience letter", "assigneeName": "Vikas", "how": "Mail", "whenText": "5 working days after the last day", "rule": { "base": "anchor", "offsetDays": 5 } }
+  ]
+}

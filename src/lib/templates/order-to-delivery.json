@@ -1,0 +1,30 @@
+{
+  "name": "Order to Delivery",
+  "description": "Confirm, pack, dispatch, confirm delivery, follow up on payment.",
+  "anchorField": "promise",
+  "titleFields": ["orderNo", "customer"],
+  "groupField": "city",
+  "weeklyOff": "0",
+  "workStart": "09:30",
+  "workEnd": "18:00",
+  "slaDays": 0,
+  "openLabel": "In progress",
+  "doneLabel": "Delivered",
+  "fields": [
+    { "key": "orderNo", "label": "Order no", "type": "text", "required": true, "unique": true },
+    { "key": "customer", "label": "Customer", "type": "text", "required": true },
+    { "key": "city", "label": "City", "type": "text", "required": true },
+    { "key": "value", "label": "Order value", "type": "number" },
+    { "key": "promise", "label": "Promised delivery", "type": "datetime", "required": true }
+  ],
+  "steps": [
+    { "stepId": "s1", "name": "Confirm order with customer", "assigneeName": "Sales", "how": "Call", "whenText": "2 hours after the order is entered", "rule": { "base": "created", "offsetDays": 0, "offsetHours": 2 } },
+    { "stepId": "s2", "name": "Pack the order", "assigneeName": "Warehouse", "how": "Checklist", "whenText": "Noon, 1 working day before delivery", "rule": { "base": "anchor", "offsetDays": -1, "timeOfDay": "12:00" } },
+    {
+      "stepId": "s3", "name": "Dispatch", "assigneeName": "Warehouse", "how": "Transporter", "whenText": "6 PM, 1 working day before delivery",
+      "rule": { "base": "anchor", "offsetDays": -1, "timeOfDay": "18:00" }, "completionFields": [{ "key": "docket", "label": "Docket / LR no", "type": "text", "required": true }]
+    },
+    { "stepId": "s4", "name": "Confirm delivery", "assigneeName": "Sales", "how": "Call", "whenText": "8 PM on the promised day", "rule": { "base": "anchor", "offsetDays": 0, "timeOfDay": "20:00" } },
+    { "stepId": "s5", "name": "Payment follow-up", "assigneeName": "Accounts", "how": "Call", "whenText": "3 working days after delivery", "rule": { "base": "anchor", "offsetDays": 3 } }
+  ]
+}

@@ -1,6 +1,7 @@
 /** Credential Vault. Secrets are encrypted at rest and only ever leave the server through `revealVault`, which checks access and writes the activity log. */
 import { decryptSecret, encryptSecret, vaultKey } from "../vault-crypto.ts";
 import { fail, forbid, newId, pub, require_, type Rec } from "../sheets/db.ts";
+import { allows, parsePermSet, stringifyPermSet } from "../../lib/permissions.ts";
 import { Ctx } from "./ctx.ts";
 
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
@@ -103,6 +104,27 @@ export async function assignVault(ctx: Ctx, d: Record<string, unknown>) {
     ctx.tx.insert("Vault_Access", { accessId: newId("VAC"), vaultId: item.vaultId, userId, canReveal: reveal ? "Y" : "N", grantedBy: ctx.actorId, grantedAt: ctx.clock.stamp, deleted: "" });
     ctx.notice({ userId, type: "vault", title: `You can use a login: ${item.service}`, body: "Open Credential Vault.", link: "/flows/vault" });
   }
-  ctx.tx.audit("Credential access changed", "Vault_Items", String(item.vaultId), null, { service: item.service, people: [...want.keys()] });
+  // Being on a login's list is not enough: the Vault screen and API need the module "Credential Vault · view". A person who is given a login therefore gets that
+  // (own records only — they still see just what is assigned to them); when their last login is taken away, the access we added is taken away again.
+  const people = await ctx.tx.rows("Users");
+  const live = alive(await ctx.tx.rows("Vault_Access"));
+  const moduleChanges: string[] = [];
+  for (const u of people) {
+    const id = String(u.userId);
+    const hasLogin = live.some((a) => a.userId === id);
+    const can = allows(ctx.permsOf(u), "vault", "view");
+    if (hasLogin && !can && u.role !== "SUPER_ADMIN") {
+      const over = parsePermSet(u.permsJson);
+      over.vault = { a: ["view"], s: "own" };
+      u.permsJson = stringifyPermSet(over);
+      moduleChanges.push(`+${id}`);
+      ctx.notice({ userId: id, type: "access", title: "You can now open the Credential Vault", body: "You see only the logins given to you.", link: "/flows/vault" });
+    } else if (!hasLogin && can && u.role !== "SUPER_ADMIN" && want.size && mine.some((a) => a.userId === id)) {
+      const over = parsePermSet(u.permsJson);
+      const g = over.vault;
+      if (g && g.a.length === 1 && g.a[0] === "view" && g.s === "own") { delete over.vault; u.permsJson = stringifyPermSet(over); moduleChanges.push(`-${id}`); }
+    }
+  }
+  ctx.tx.audit("Credential access changed", "Vault_Items", String(item.vaultId), null, { service: item.service, people: [...want.keys()], vaultModule: moduleChanges.join(" ") });
   return { vaultId: item.vaultId };
 }

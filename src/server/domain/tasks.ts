@@ -3,6 +3,7 @@ import type { Flow, FlowStep } from "../../lib/flow-types.ts";
 import { effectiveAssignee } from "../../lib/flow-shared.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
+import { decideChecklistTime } from "./checklist-time.ts";
 import { allows, reachOf, scopeOfGrant } from "../../lib/permissions.ts";
 import { calendarFor, planTasks, refreshItemStatus } from "./engine.ts";
 import { coerceField, parseData } from "./entries.ts";
@@ -143,6 +144,8 @@ export async function decideRequest(ctx: Ctx, d: Record<string, unknown>) {
   const r = (await ctx.tx.rows("Requests")).find((x) => x.requestId === str(d.requestId));
   require_(r, "Unknown request");
   require_(r.status === "Pending", `This request was already ${String(r.status).toLowerCase()}`);
+  if (r.kind === "checklist") return decideChecklistTime(ctx, r, d);
+  ctx.require("fms", "view", "You do not have access to this");
   const { task, item, flow, step } = await parts(ctx, String(r.taskId));
   const allowed = (await approversFor(ctx, task, step)).includes(ctx.actorId);
   if (!allowed) fail("FORBIDDEN", "Only the doer's reporting manager, or someone allowed to decide for this department, can decide this");

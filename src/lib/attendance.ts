@@ -123,3 +123,53 @@ export function leaveBalance(allot: number, leaves: LeaveRow[], userId: string, 
 
 export const STATUS_LABEL: Record<DayStatus, string> = { present: "Present", half: "Half day", absent: "Absent", leave: "On leave", off: "Weekly off", holiday: "Holiday", pending: "Not yet", future: "" };
 export const fmtHours = (h: number) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
+
+// ---------------- leave, year by year ----------------
+// Every calendar year has its own balance:   balance = allowance + carried from last year + manual adjustments − approved leave
+//  · allowance: the person's own figure for that year, else the company policy for that year, else the figure on their profile;
+//  · carried: what was left at the end of the previous year, at most the policy's "carry forward" limit — and, when the policy says carried days
+//    must be used by a date (say 03-31), the part not used by then is lost;
+//  · only Approved leave is taken off; Pending is shown separately (reserved), Rejected and Cancelled never count.
+export interface LeavePolicyRow { year: string; allot: number; carryMax: number; carryUntil: string }
+export interface LeaveAdjustRow { userId: string; year: string; allot: number | null; delta: number; deleted?: string }
+export interface YearBalance {
+  year: string; allot: number; carried: number; carryLost: number; adjustment: number; total: number; used: number; pending: number; left: number; available: number;
+  carryUntil: string; carryUsed: number; source: "own" | "policy" | "profile" | "none";
+}
+
+/** Days a leave takes off the balance inside one calendar year (a leave over New Year is split). */
+export function leaveDaysInYear(l: Pick<LeaveRow, "type" | "startDate" | "endDate" | "days">, year: string, cal?: Cal): number {
+  const first = `${year}-01-01`, last = `${year}-12-31`;
+  if (l.startDate > last || l.endDate < first) return 0;
+  if (l.startDate.slice(0, 4) === year && l.endDate.slice(0, 4) === year) return cal ? leaveDays(l.type, l.startDate, l.endDate, cal) : l.days;
+  if (!cal) return l.startDate.slice(0, 4) === year ? l.days : 0;
+  return leaveDays(l.type, l.startDate < first ? first : l.startDate, l.endDate > last ? last : l.endDate, cal);
+}
+
+export function yearBalance(args: { userId: string; year: string; leaves: LeaveRow[]; policies: LeavePolicyRow[]; adjusts: LeaveAdjustRow[]; profileAllot: number; cal?: Cal; today?: string; depth?: number }): YearBalance {
+  const { userId, year, leaves, policies, adjusts, profileAllot, cal, today = "9999-12-31", depth = 0 } = args;
+  const pol = policies.find((p) => p.year === year);
+  const mineAdj = adjusts.filter((a) => a.userId === userId && a.year === year && a.deleted !== "Y");
+  const own = [...mineAdj].reverse().find((a) => a.allot !== null && a.allot !== undefined);
+  let allot = 0, source: YearBalance["source"] = "none";
+  if (own) { allot = Number(own.allot); source = "own"; } else if (pol) { allot = pol.allot; source = "policy"; } else if (profileAllot > 0) { allot = profileAllot; source = "profile"; }
+  const adjustment = mineAdj.reduce((a, x) => a + (Number(x.delta) || 0), 0);
+  const sum = (status: string, until?: string) => leaves
+    .filter((l) => l.userId === userId && l.status === status && (!until || l.startDate <= until))
+    .reduce((a, l) => a + leaveDaysInYear(l, year, cal), 0);
+  const used = sum("Approved"), pending = sum("Pending");
+  // carried from the year before (looked at up to 4 years back; a year with no allowance at all carries nothing)
+  let carried = 0, carryLost = 0, carryUsed = 0;
+  const carryUntil = pol?.carryUntil && /^\d\d-\d\d$/.test(pol.carryUntil) ? `${year}-${pol.carryUntil}` : "";
+  if (pol && pol.carryMax > 0 && depth < 4) {
+    const prev = yearBalance({ ...args, year: String(Number(year) - 1), depth: depth + 1 });
+    if (prev.source !== "none") carried = Math.min(pol.carryMax, Math.max(0, prev.left));
+    if (carried > 0 && carryUntil) {
+      // leave taken up to the deadline uses the carried days first; what is left of them after the deadline is lost
+      carryUsed = Math.min(carried, sum("Approved", carryUntil));
+      if (today > carryUntil) { carryLost = carried - carryUsed; carried = carryUsed; }
+    }
+  }
+  const total = allot + carried + adjustment;
+  return { year, allot, carried, carryLost, adjustment, total, used, pending, left: total - used, available: total - used - pending, carryUntil, carryUsed, source };
+}

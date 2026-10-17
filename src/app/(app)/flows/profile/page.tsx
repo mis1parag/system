@@ -45,7 +45,7 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="My profile" subtitle={`${me.name} · ${ROLE_LABEL[me.role as Role]}${me.department ? ` · ${me.department}` : ""}${me.managerId ? ` · reporting manager ${userName(me.managerId)}` : ""}`} />
+      <PageHeader title="My profile" subtitle={`${me.name}${(me as { empCode?: string }).empCode ? ` · ID ${(me as { empCode?: string }).empCode}` : ""} · ${ROLE_LABEL[me.role as Role]}${me.department ? ` · ${me.department}` : ""}${me.managerId ? ` · reporting manager ${userName(me.managerId)}` : ""}`} />
       {err && <p role="alert" className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
       <div className="grid gap-4">
         <Section title="My photo and details" hint="Your picture shows next to your name everywhere. Your personal details are seen only by you and the people allowed to see employee details."><ProfileEditor userId={me.userId} /></Section>

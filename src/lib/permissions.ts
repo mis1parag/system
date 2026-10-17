@@ -5,7 +5,7 @@
 // DENY BY DEFAULT: a module that is not granted does not exist for that person.
 import type { Role } from "./types.ts";
 
-export type ModuleId = "fms" | "checklist" | "attendance" | "scorecard" | "quick_access" | "vault" | "employees" | "reports" | "settings" | "audit";
+export type ModuleId = "fms" | "checklist" | "attendance" | "scorecard" | "quick_access" | "vault" | "employees" | "reports" | "settings" | "audit" | "payroll" | "reminders";
 export type Action = "view" | "create" | "edit" | "delete" | "assign" | "approve" | "export" | "import" | "manage" | "configure";
 export type Scope = "own" | "team" | "department" | "all";
 
@@ -24,7 +24,7 @@ export const ACTIONS: { id: Action; label: string; hint: string }[] = [
 
 export interface ModuleDef { id: ModuleId; label: string; hint: string; actions: Action[]; scoped: boolean }
 export const MODULES: ModuleDef[] = [
-  { id: "fms", label: "FMS", hint: "Processes, entries and their steps (My tasks, Approvals)", actions: ["view", "create", "edit", "delete", "assign", "approve", "export", "import", "manage", "configure"], scoped: true },
+  { id: "fms", label: "FMS", hint: "Processes, entries and their steps (FMS tasks, Approvals)", actions: ["view", "create", "edit", "delete", "assign", "approve", "export", "import", "manage", "configure"], scoped: true },
   { id: "checklist", label: "Checklist", hint: "Daily, weekly, monthly and one-time tasks", actions: ["view", "create", "edit", "delete", "assign", "export", "import", "manage"], scoped: true },
   { id: "attendance", label: "Attendance & leave", hint: "Check in / out, leave, holidays, kiosk", actions: ["view", "create", "edit", "approve", "export", "import", "manage", "configure"], scoped: true },
   { id: "scorecard", label: "Scorecard", hint: "Weekly % done and % on time", actions: ["view", "export", "manage"], scoped: true },
@@ -34,6 +34,8 @@ export const MODULES: ModuleDef[] = [
   { id: "reports", label: "Reports & insights", hint: "Who delivers on time, which FMS runs late", actions: ["view", "export"], scoped: true },
   { id: "settings", label: "Settings", hint: "Company rules, reminders, attendance rules", actions: ["view", "configure"], scoped: false },
   { id: "audit", label: "Activity logs", hint: "Every change: who did what and when", actions: ["view", "export"], scoped: true },
+  { id: "payroll", label: "Salary slips", hint: "Everyone sees only their own slips. Payroll people prepare and publish them. Managers get no access unless you give it", actions: ["view", "create", "edit", "delete", "approve", "export", "import", "manage"], scoped: true },
+  { id: "reminders", label: "Reminders", hint: "Send a reminder to one person or to a group in your reach", actions: ["view", "create", "manage"], scoped: true },
 ];
 export const MODULE_IDS = MODULES.map((m) => m.id);
 export const SCOPES: { id: Scope; label: string; hint: string }[] = [
@@ -63,16 +65,16 @@ export const DEFAULT_TEMPLATES: Record<Exclude<SystemRole, "SUPER_ADMIN">, PermS
   ADMIN: {
     fms: g(all("fms"), "department"), checklist: g(all("checklist"), "department"), attendance: g(all("attendance").filter((x) => x !== "configure"), "department"),
     scorecard: g(all("scorecard"), "department"), quick_access: g(all("quick_access"), "all"), vault: g(["view"], "own"), employees: g(all("employees"), "department"),
-    reports: g(["view", "export"], "department"), audit: g(["view"], "department"),
+    reports: g(["view", "export"], "department"), audit: g(["view"], "department"), payroll: g(["view"], "own"), reminders: g(["view", "create"], "department"),
   },
   MANAGER: {
     fms: g(["view", "create", "edit", "assign", "approve", "export"], "team"), checklist: g(["view", "create", "edit", "assign", "export"], "team"),
     attendance: g(["view", "create", "edit", "approve", "export"], "team"), scorecard: g(["view", "export"], "team"), quick_access: g(["view", "create", "edit", "delete"], "all"),
-    employees: g(["view", "edit"], "team"), reports: g(["view", "export"], "team"),
+    employees: g(["view", "edit"], "team"), reports: g(["view", "export"], "team"), payroll: g(["view"], "own"), reminders: g(["view", "create"], "team"),
   },
   STAFF: {
     fms: g(["view", "create", "edit"], "own"), checklist: g(["view", "edit"], "own"), attendance: g(["view", "create"], "own"), scorecard: g(["view"], "own"),
-    quick_access: g(["view", "create", "edit", "delete"], "all"), employees: g(["view"], "own"),
+    quick_access: g(["view", "create", "edit", "delete"], "all"), employees: g(["view"], "own"), payroll: g(["view"], "own"), reminders: g(["view"], "own"),
   },
 };
 
@@ -182,7 +184,8 @@ export type RoleKey = Role | SystemRole;
 /** Which module a notification belongs to (so nobody is told about data they cannot open). "" = about the person's own access: always shown. */
 export function moduleOfNotification(n: { link?: unknown; type?: unknown }): ModuleId | "" {
   const link = String(n.link ?? ""), type = String(n.type ?? "");
-  if (type === "access") return "";
+  if (type === "access" || type === "reminder" || type === "announcement") return "";
+  if (type === "payroll" || link.startsWith("/flows/payslips")) return "payroll";
   if (link.startsWith("/flows/attendance") || /^(checkin|checkout|leave)/.test(type)) return "attendance";
   if (link.startsWith("/flows/checklist") || type.startsWith("checklist")) return "checklist";
   if (link.startsWith("/flows/vault") || type === "vault") return "vault";

@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { CalendarCheck2Icon, CheckIcon, ClipboardCheckIcon, ExternalLinkIcon, InboxIcon, ListChecksIcon, PlusIcon, TimerIcon, UsersIcon, WorkflowIcon, XIcon, ZapIcon, type LucideIcon } from "lucide-react";
+import { CalendarCheck2Icon, CheckIcon, ClipboardCheckIcon, ExternalLinkIcon, InboxIcon, ListChecksIcon, TimerIcon, UsersIcon, WorkflowIcon, XIcon, ZapIcon, type LucideIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { PageHeader, Pill, Section } from "@/components/common";
 import { DoneDialog, EntryPanel, stateTone } from "@/components/flow/entry-panel";
 import { PunchCard } from "@/components/attendance/punch-card";
+import { AnnouncementBar } from "@/components/announcements";
 import { useAttendance } from "@/components/attendance/use-attendance";
 import { checklistOwner } from "@/lib/checklist-shared";
 import { delayMinutes, effectiveAssignee, parseFlow, taskState } from "@/lib/flow";
@@ -27,7 +28,7 @@ export default function HomePage() {
   const n = now();
   const att = useAttendance();
   const me = data?.me;
-  const fms = has("fms"), checklist = has("checklist"), attendance = has("attendance"), quickAccess = has("quick_access");
+  const fms = has("fms") && (isSuper || flows.length > 0), checklist = has("checklist"), attendance = has("attendance"), quickAccess = has("quick_access");
 
   const model = useMemo(() => {
     const items = new Map((data?.items ?? []).map((i) => [i.itemId, i]));
@@ -89,7 +90,6 @@ export default function HomePage() {
   const hour = Number(n.slice(11, 13));
   const hello = `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}${me ? `, ${me.name.split(" ")[0]}` : ""}`;
   const todo = model.overdue.length + model.dueToday.length + model.clOpen;
-  const myFlows = flows.filter((f) => !f.archived);
   const links = [...(data?.quickLinks ?? [])].filter((l) => l.favorite === "Y" || !l.ownerId).slice(0, 8);
   const decisions = model.decisions.filter((r) => isSuper || data?.users.find((u) => u.userId === r.requestedBy)?.managerId === meId || (allow("fms", "approve") && inReach(r.requestedBy, "fms")));
 
@@ -98,13 +98,15 @@ export default function HomePage() {
       <PageHeader
         title={hello}
         subtitle={`${fmtDate(today, true)} · ${todo === 0 ? "You are all caught up." : `${todo} thing${todo === 1 ? "" : "s"} need${todo === 1 ? "s" : ""} you today.`}`}
-        actions={<>{isSuper && <Link href="/flows/admin" className={cn(buttonVariants({ variant: "outline" }), "h-9")}>Control center</Link>}{allow("fms", "create") && myFlows.length > 0 && <Link href={`/flows/${myFlows[0].flowId}?new=1`} className={cn(buttonVariants(), "h-9")}><PlusIcon /> New entry</Link>}</>}
+        actions={<>{isSuper && <Link href="/flows/admin" className={cn(buttonVariants({ variant: "outline" }), "h-9")}>Control center</Link>}</>}
       />
+
+      <AnnouncementBar />
 
       {attendance && <div className="mb-4"><PunchCard compact /></div>}
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-5">
-        {fms && <Card icon={ListChecksIcon} label="My tasks" value={model.mine.length} sub="waiting for me" href="/flows/tasks?quick=mine" />}
+        {fms && <Card icon={ListChecksIcon} label="FMS tasks" value={model.mine.length} sub="waiting for me" href="/flows/tasks?quick=mine" />}
         {fms && <Card icon={TimerIcon} label="Due today" value={model.dueToday.length} tone={model.dueToday.length ? "warn" : undefined} sub="steps" href="/flows/tasks?quick=today" />}
         {fms && <Card icon={WorkflowIcon} label="Overdue" value={model.overdue.length} tone={model.overdue.length ? "bad" : "good"} sub={model.teamLate.length ? `+ ${model.teamLate.length} in my team` : "steps"} href="/flows/tasks?quick=overdue" />}
         {checklist && <Card icon={ClipboardCheckIcon} label="Checklist pending" value={model.clOpen} tone={model.clOverdue ? "bad" : model.clOpen ? "warn" : "good"} sub={model.clDone ? `${model.clDone} ticked today` : model.clOverdue ? `${model.clOverdue} overdue` : "for today"} href="/flows/checklist?quick=mine" />}
@@ -185,11 +187,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {fms && allow("fms", "create") && myFlows.length > 0 && (
-        <Section title="Start something" hint="A new entry in any FMS you use" className="mt-5">
-          <div className="flex flex-wrap gap-2">{myFlows.slice(0, 12).map((f) => <Link key={f.flowId} href={`/flows/${f.flowId}?new=1`} className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-sm font-medium shadow-[0_1px_1px_rgba(26,31,54,0.05)] hover:bg-[#f6f9fc]"><PlusIcon className="size-3.5 text-primary" />{f.name}</Link>)}{myFlows.length > 12 && <Link href="/flows" className="px-1 py-1.5 text-sm text-primary hover:underline">All {myFlows.length} FMS</Link>}</div>
-        </Section>
-      )}
 
       {!fms && !checklist && !attendance && !quickAccess && (
         <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">Nothing has been given to you yet. Ask the Super Admin which modules you should have.</p>

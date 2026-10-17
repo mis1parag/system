@@ -12,6 +12,7 @@ import { checklistTick } from "./checklist.ts";
 import { attendanceTick } from "./attendance-tick.ts";
 import { addDays, isOffDay, minutesBetween, weekday } from "./time.ts";
 import { calendarFor } from "./engine.ts";
+import { settleExits } from "./exit.ts";
 
 const STALE_DAYS = 3; // tasks overdue for longer than this are flagged silently (no flood of alerts for old backlog)
 
@@ -21,6 +22,7 @@ export async function tick(ctx: Ctx): Promise<TickResult> {
   const out: TickResult = { reminders: 0, overdue: 0, escalations: 0, recurring: 0, digests: 0, checklistCreated: 0, checklistReminders: 0, attendanceReminders: 0 };
   const tx = ctx.tx;
   await tx.load("Users", "Flows", "Flow_Items", "Flow_Tasks", "Absences", "Holidays");
+  await settleExits(ctx); // people whose last working day has come
   const now = ctx.clock;
   const defRemind = ctx.settingNum("REMINDER_MINUTES"), defEsc = ctx.settingNum("ESCALATE_AFTER_MINUTES");
   const absences = await absenceRows(ctx);

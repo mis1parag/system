@@ -17,6 +17,7 @@ import { BulkDialog, scheduleText, TaskDialog } from "@/components/checklist/tas
 import { MoveDialog } from "@/components/move-dialog";
 import { checklistOwner, FREQ_LABEL } from "@/lib/checklist-shared";
 import { plannedDates } from "@/lib/checklist-schedule";
+import { ChecklistMoreTimeDialog } from "@/components/checklist/more-time-dialog";
 import { applyFilters, downloadCsv, EMPTY_FILTER, toCsv, type FieldDef, type FilterState } from "@/lib/filters";
 import { CHECKLIST_FREQ, type ChecklistEntry, type ChecklistFreq, type ChecklistTask } from "@/lib/flow-types";
 import { addDays, fmtDate, weekdayName } from "@/lib/dates";
@@ -77,6 +78,8 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
   const adding = addPick ?? (wantAdd && allow("checklist", "create"));
   const [bulk, setBulk] = useState(false);
   const [moving, setMoving] = useState<string[] | null>(null);
+  const [asking, setAsking] = useState<Row | null>(null);
+  const askedIds = new Set((data?.requests ?? []).filter((q) => q.kind === "checklist" && q.status === "Pending").map((q) => q.taskId));
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const people = peopleFor("checklist");
   const week = addDays(today, 7);
@@ -103,7 +106,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
   }), [meId, today, week]);
   const count = (id: string) => rows.filter(quickFns[id]).length;
   const quick: QuickDef[] = [
-    { id: "mine", label: "My tasks", count: count("mine") }, { id: "today", label: "Today", count: count("today") }, { id: "pending", label: "Pending", count: count("pending") },
+    { id: "mine", label: "Mine", count: count("mine") }, { id: "today", label: "Today", count: count("today") }, { id: "pending", label: "Pending", count: count("pending") },
     { id: "overdue", label: "Overdue", count: count("overdue") }, { id: "done", label: "Completed" }, { id: "all", label: "All" },
   ];
   const shown = useMemo(() => applyFilters(rows, fields, state, { quick: quickFns, text: (r) => `${r.t.title} ${r.t.department} ${r.t.kra} ${userName(r.owner)}` })
@@ -154,6 +157,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
       <h2 className="mb-1.5 flex items-center gap-2 text-sm font-semibold"><Pill tone={tone}>{title}</Pill><span className="text-muted-foreground">{items.length}</span></h2>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">{items.map((r) => (
         <Item key={r.e.clId} r={r} showWho={people.length > 1} busy={busy === r.e.clId} canTick={mayTick(r)} onTick={() => tick(r)}
+          asked={askedIds.has(r.e.clId)} onMore={r.e.status === "Pending" && mayTick(r) && !askedIds.has(r.e.clId) ? () => setAsking(r) : undefined}
           onUndo={r.e.status === "Done" && r.e.actual.slice(0, 10) === today && canEdit ? () => undo(r.e.clId) : undefined}
           selected={picked.has(r.e.clId)} onSelect={r.e.status === "Pending" && (mayTick(r) || canMove) ? () => toggle(r.e.clId) : undefined} />
       ))}</div>
@@ -194,6 +198,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
       {proofFor && <ProofDialog row={proofFor} onClose={() => setProofFor(null)} />}
       {adding && <TaskDialog onClose={() => setAdding(false)} />}
       {bulk && <BulkDialog onClose={() => setBulk(false)} />}
+      {asking && <ChecklistMoreTimeDialog clId={asking.e.clId} title={asking.t.title} plannedDate={asking.e.plannedDate} onClose={() => setAsking(null)} />}
       {moving && <MoveDialog kind="checklist" ids={moving} onClose={(ok) => { setMoving(null); if (ok) setPicked(new Set()); }} />}
     </>
   );
@@ -235,7 +240,7 @@ function QuickAdd({ onMore, onBulk }: { onMore: () => void; onBulk: () => void }
   );
 }
 
-function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect }: { r: Row; showWho?: boolean; busy: boolean; canTick: boolean; onTick: () => void; onUndo?: () => void; selected?: boolean; onSelect?: () => void }) {
+function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect, asked, onMore }: { r: Row; showWho?: boolean; busy: boolean; canTick: boolean; onTick: () => void; onUndo?: () => void; selected?: boolean; onSelect?: () => void; asked?: boolean; onMore?: () => void }) {
   const { today, userName } = useFlows();
   const done = r.e.status === "Done";
   const late = !done && r.e.plannedDate < today;
@@ -263,6 +268,8 @@ function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect }:
           {r.e.proof && !/^https?:\/\//.test(r.e.proof) && <span title={r.e.proof}>· proof: {r.e.proof.slice(0, 40)}</span>}
         </div>
       </div>
+      {asked && <Pill tone="amber">More time asked</Pill>}
+      {onMore && <button onClick={onMore} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted" title="Ask your manager for more time">More time</button>}
       {onUndo && <button onClick={onUndo} aria-label="Undo" className="rounded p-1.5 text-muted-foreground hover:bg-muted"><Undo2Icon className="size-4" /></button>}
     </div>
   );

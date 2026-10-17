@@ -43,6 +43,8 @@ interface FlowStore {
   /** Active people I may see in a module, myself first. For pickers and lists. */
   peopleFor: (module: ModuleId) => FlowUser[];
   absencesNow: Absence[];
+  /** The name of a company holiday ("Diwali"), or "" when the day is not a holiday. */
+  holidayName: (date: string) => string;
   itemsOf: (flowId: string) => FlowItem[];
   tasksOf: (itemId: string) => FlowTask[];
 }
@@ -89,7 +91,7 @@ export function FlowProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let last = Date.now();
     const onVis = () => { if (document.visibilityState === "visible" && Date.now() - last > 60_000) { last = Date.now(); refresh(); } };
-    const timer = setInterval(() => { if (document.visibilityState === "visible") { last = Date.now(); refresh(); } }, 120_000);
+    const timer = setInterval(() => { if (document.visibilityState === "visible") { last = Date.now(); refresh(); } }, 60_000);
     document.addEventListener("visibilitychange", onVis);
     return () => { document.removeEventListener("visibilitychange", onVis); clearInterval(timer); };
   }, [refresh]);
@@ -141,6 +143,8 @@ export function FlowProvider({ children }: { children: ReactNode }) {
   const itemsOf = useCallback((flowId: string) => (items ?? []).filter((i) => i.flowId === flowId), [items]);
   const tasksOf = useCallback((itemId: string) => (tasks ?? []).filter((t) => t.itemId === itemId).sort((a, b) => a.seq - b.seq), [tasks]);
 
+  const holidays = data?.holidays;
+  const holidayName = useCallback((date: string) => { const h = (holidays ?? []).find((x) => x.date === date && !x.flowId); if (!h) return ""; return /^imported/i.test(h.label) || !h.label ? "Holiday" : h.label; }, [holidays]);
   const can = useCallback((cap: Cap) => !!data?.can?.[cap], [data?.can]);
   const allow = useCallback((m: ModuleId, a: Action) => !!data?.perms?.[m]?.a.includes(a), [data?.perms]);
   const has = useCallback((m: ModuleId) => !!data?.perms?.[m]?.a.includes("view"), [data?.perms]);
@@ -152,7 +156,7 @@ export function FlowProvider({ children }: { children: ReactNode }) {
   const value: FlowStore = {
     data, loading, error, flows, userById, userName, meId: data?.me.userId ?? "",
     isAdmin: data?.me.role === "SUPER_ADMIN" || data?.me.role === "ADMIN", isSuper: data?.me.role === "SUPER_ADMIN",
-    now: nowDT, today, refresh, loadHistory, absorb, optimistic, call, can, allow, has, inReach, peopleFor, absencesNow: data?.absences ?? [], itemsOf, tasksOf,
+    now: nowDT, today, refresh, loadHistory, absorb, optimistic, call, can, allow, has, inReach, peopleFor, absencesNow: data?.absences ?? [], holidayName, itemsOf, tasksOf,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

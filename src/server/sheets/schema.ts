@@ -16,13 +16,15 @@ export interface TableDef {
 
 export const TABLES: Record<string, TableDef> = {
   Users: {
-    name: "Users", idKey: "userId", prefix: "USR",
+    name: "Users", idKey: "userId", prefix: "USR", softDelete: true,
     cols: [
       ["userId", "User ID", "s"], ["name", "Name", "s"], ["role", "Role", "s"], ["mobile", "Mobile", "s"], ["email", "Email", "s"],
       ["status", "Status", "s"], ["managerId", "Reporting Manager", "s"], ["notify", "Notify via", "s"], ["pinHash", "PIN Hash", "s"],
       ["failCount", "Failed Logins", "n"], ["lockedUntil", "Locked Until", "s"], ["createdAt", "Created", "s"], ["department", "Department", "s"],
       ["empCode", "Employee ID", "s"], ["leaveAllot", "Leave Allotted (days / year)", "n"], ["photoVer", "Profile Photo Version", "s"],
       ["roleId", "Custom Role", "s"], ["permsJson", "Personal Access Overrides (JSON)", "s"],
+      ["exitDate", "Last working day (exit)", "s"], ["exitType", "Exit type", "s"], ["exitReason", "Exit note", "s"], ["exitHandover", "Work handed over to", "s"],
+      ["exitBy", "Exit recorded by", "s"], ["exitAt", "Exit recorded at", "s"], ["exitDone", "Exit applied (Y)", "s"], ["deleted", "Deleted", "s"],
     ],
   },
   /** One small profile picture per person (JPEG data). Served by /api/avatar/<id>, never part of the page data. */
@@ -80,7 +82,7 @@ export const TABLES: Record<string, TableDef> = {
     cols: [
       ["requestId", "Request ID", "s"], ["taskId", "Task", "s"], ["itemId", "Item", "s"], ["flowId", "Flow", "s"], ["requestedBy", "Requested By", "s"],
       ["newPlanned", "New Planned", "s"], ["reason", "Reason", "s"], ["status", "Status", "s"], ["decidedBy", "Decided By", "s"],
-      ["decidedAt", "Decided At", "s"], ["note", "Decision Note", "s"], ["createdAt", "Created", "s"],
+      ["decidedAt", "Decided At", "s"], ["note", "Decision Note", "s"], ["createdAt", "Created", "s"], ["kind", "Kind (blank = FMS step, checklist = checklist task)", "s"],
     ],
   },
   Notifications: {
@@ -93,7 +95,7 @@ export const TABLES: Record<string, TableDef> = {
   },
   Holidays: {
     name: "Holidays", idKey: "holidayId", prefix: "HOL", softDelete: true,
-    cols: [["holidayId", "Holiday ID", "s"], ["date", "Date", "s"], ["label", "Label", "s"], ["flowId", "Flow (blank = all)", "s"], ["deleted", "Deleted", "s"]],
+    cols: [["holidayId", "Holiday ID", "s"], ["date", "Date", "s"], ["label", "Label", "s"], ["flowId", "Flow (blank = all)", "s"], ["deleted", "Deleted", "s"], ["published", "Published (N = draft, only admins see it)", "s"], ["note", "Note", "s"]],
   },
   Absences: {
     name: "Absences", idKey: "absenceId", prefix: "ABS", softDelete: true,
@@ -141,6 +143,49 @@ export const TABLES: Record<string, TableDef> = {
       ["note", "Decision Note", "s"], ["createdAt", "Created", "s"],
     ],
   },
+  /** Leave rules of one calendar year: yearly allowance, how much may be carried to the next year and until when. */
+  Leave_Policy: {
+    name: "Leave_Policy", idKey: "year", prefix: "LPO",
+    cols: [["year", "Year", "s"], ["allot", "Leave days for the year", "n"], ["carryMax", "Carry forward at most (days)", "n"], ["carryUntil", "Carried days can be used until (MM-DD)", "s"], ["note", "Note", "s"], ["updatedBy", "Updated By", "s"], ["updatedAt", "Updated", "s"]],
+  },
+  /** One person's own allowance for a year (when it differs from the policy) and manual +/- adjustments. Never deleted: a correction is a new row. */
+  Leave_Adjust: {
+    name: "Leave_Adjust", idKey: "adjId", prefix: "LAD", softDelete: true,
+    cols: [["adjId", "ID", "s"], ["userId", "User", "s"], ["year", "Year", "s"], ["allot", "Own allowance (blank = follow the policy)", "nn"], ["delta", "Adjustment (+/- days)", "n"], ["note", "Reason", "s"], ["createdBy", "By", "s"], ["createdAt", "Created", "s"], ["deleted", "Deleted", "s"]],
+  },
+  /** Salary slips. Read only through the payroll actions, which check that the slip is yours (published) or that you run payroll. */
+  Salary_Slips: {
+    name: "Salary_Slips", idKey: "slipId", prefix: "SLP", softDelete: true,
+    cols: [
+      ["slipId", "Slip ID", "s"], ["userId", "Employee", "s"], ["period", "Month (YYYY-MM)", "s"], ["daysPaid", "Days paid", "nn"], ["earningsJson", "Earnings (JSON)", "s"], ["deductionsJson", "Deductions (JSON)", "s"],
+      ["gross", "Gross", "n"], ["totalDeductions", "Total deductions", "n"], ["net", "Net pay", "n"], ["note", "Note", "s"], ["status", "Status (Draft / Published)", "s"],
+      ["createdBy", "Created By", "s"], ["createdAt", "Created", "s"], ["publishedBy", "Published By", "s"], ["publishedAt", "Published", "s"], ["viewedAt", "Employee first opened", "s"], ["deleted", "Deleted", "s"],
+    ],
+  },
+  /** A person asks payroll for a salary slip (a month that is missing). */
+  Slip_Requests: {
+    name: "Slip_Requests", idKey: "reqId", prefix: "SRQ",
+    cols: [["reqId", "ID", "s"], ["userId", "Employee", "s"], ["period", "Month (YYYY-MM)", "s"], ["note", "Note", "s"], ["status", "Status (Pending / Done / Declined)", "s"], ["createdAt", "Asked", "s"], ["handledBy", "Handled by", "s"], ["handledAt", "Handled", "s"], ["reply", "Reply", "s"]],
+  },
+  /** Private notepad. A note belongs to one person and is never part of any list, report or dashboard of anyone else. */
+  Notes: {
+    name: "Notes", idKey: "noteId", prefix: "NOT", softDelete: true,
+    cols: [["noteId", "Note ID", "s"], ["userId", "Owner", "s"], ["text", "Text", "s"], ["done", "Done", "s"], ["dueDate", "Due date", "s"], ["createdAt", "Created", "s"], ["updatedAt", "Updated", "s"], ["convertedTo", "Became official task", "s"], ["deleted", "Deleted", "s"]],
+  },
+  /** Reminders a manager sent. The person also gets a notification; this log records who sent what to whom. */
+  Reminders: {
+    name: "Reminders", idKey: "remId", prefix: "REM",
+    cols: [
+      ["remId", "Reminder ID", "s"], ["batchId", "Batch (one send)", "s"], ["sendKey", "Send key (stops double sends)", "s"], ["fromId", "From", "s"], ["toId", "To", "s"], ["message", "Message", "s"],
+      ["relatedType", "About (fms / checklist / leave / other)", "s"], ["relatedId", "Related record", "s"], ["relatedTitle", "Related title", "s"], ["link", "Link", "s"], ["dueDate", "Due", "s"],
+      ["status", "Status", "s"], ["createdAt", "Sent", "s"], ["readAt", "Read", "s"],
+    ],
+  },
+  /** Notices from the Super Admin to everyone, a department or chosen people. */
+  Announcements: {
+    name: "Announcements", idKey: "annId", prefix: "ANN", softDelete: true,
+    cols: [["annId", "ID", "s"], ["title", "Title", "s"], ["body", "Message", "s"], ["audience", "Audience (all / dept:Name / users:id,id)", "s"], ["tone", "Tone (info / important)", "s"], ["startDate", "Show from", "s"], ["endDate", "Show until", "s"], ["createdBy", "By", "s"], ["createdAt", "Created", "s"], ["deleted", "Deleted", "s"]],
+  },
   Settings: {
     name: "Settings", idKey: "key", prefix: "SET",
     cols: [["key", "Key", "s"], ["value", "Value", "s"], ["description", "Description", "s"], ["group", "Group", "s"]],
@@ -176,11 +221,12 @@ export const TABLES: Record<string, TableDef> = {
   },
 };
 
-export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Settings", "Audit_Log"];
+export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Slip_Requests", "Notes", "Reminders", "Announcements", "Settings", "Audit_Log"];
 
 /** [key, default, description] */
 export const DEFAULT_SETTINGS: [string, string, string][] = [
   ["COMPANY_NAME", "MIDAP", "Shown in the app header and notifications"],
+  ["LEAVE_BLOCK_OVERDRAW", "N", "Y = a leave request that goes beyond the balance is refused (N = it is allowed with a warning)"],
   ["TIMEZONE", "Asia/Kolkata", "IANA timezone for 'now' and 'today' (planned / actual times)"],
   ["REMINDER_MINUTES", "60", "Remind the doer this many minutes before a step is due (a step can override it)"],
   ["ESCALATE_AFTER_MINUTES", "240", "Tell the doer's manager when a step is this many minutes overdue (a step can override it)"],

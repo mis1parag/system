@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { LogInIcon, LogOutIcon, MapPinIcon } from "lucide-react";
@@ -15,8 +15,9 @@ import { cn } from "@/lib/utils";
 
 /** Today's punches of the signed-in person and the one action that makes sense now (check in / check out). */
 export function usePunch() {
-  const { data, meId, today, now, call, allow } = useFlows();
+  const { data, meId, today, now, call, allow, refresh } = useFlows();
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false); // a second tap while the first is still on its way does nothing
   const [, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 30_000); return () => clearInterval(t); }, []); // keeps the timer moving
 
@@ -31,13 +32,23 @@ export function usePunch() {
 
   /** `photo` is optional: a punch never needs one. */
   async function punch(photo = "") {
+    if (inFlight.current) return false;
+    inFlight.current = true;
     setBusy(true);
-    const pos = await getPosition();
-    const r = await call(state === "in" ? "checkOut" : "checkIn", { ...pos, photo });
-    setBusy(false);
-    if (!r.ok) toast.error(r.error || "Could not save");
-    else toast.success(state === "in" ? "Checked out — have a good evening" : "Checked in — have a good day", { description: pos.lat ? "Location saved" : "Location not available (saved without it)" });
-    return r.ok;
+    try {
+      const pos = await getPosition();
+      const r = await call(state === "in" ? "checkOut" : "checkIn", { ...pos, photo });
+      if (!r.ok) {
+        toast.error(r.code === "NETWORK" ? "No connection — your punch may not have been saved. Checking…" : r.error || "Could not save");
+        await refresh(); // the screen may be out of date (another device, a slow connection): show what the server really has
+        return false;
+      }
+      toast.success(state === "in" ? "Checked out — have a good evening" : "Checked in — have a good day", { description: pos.lat ? "Location saved" : "Location not available (saved without it)" });
+      return true;
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }
   return { mine, open, closedMin, liveMin, state, busy, punch, kioskOnly, photoByDefault };
 }

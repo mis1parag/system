@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CalendarPlusIcon, Trash2Icon } from "lucide-react";
@@ -18,9 +19,9 @@ export default function TeamPage() {
   const isAdmin = can("manageHolidays");
   return (
     <>
-      <PageHeader title="Absence & Holidays" subtitle="When someone is away, their steps move to a backup automatically. Holidays are skipped in planned times." />
+      <PageHeader title="Absence & Holidays" subtitle={<>When someone is away, their steps move to a backup automatically. Company-wide holidays are on the <Link href="/flows/holidays" className="text-primary underline">Holidays page</Link>.</>} />
       <Tabs defaultValue="absence">
-        <div className="mb-3"><TabsList><TabsTrigger value="absence">Absence</TabsTrigger>{isAdmin && <TabsTrigger value="holidays">Holidays</TabsTrigger>}</TabsList></div>
+        <div className="mb-3"><TabsList><TabsTrigger value="absence">Absence</TabsTrigger>{isAdmin && <TabsTrigger value="holidays">Holidays for one FMS</TabsTrigger>}</TabsList></div>
         <TabsContent value="absence"><Absences /></TabsContent>
         {isAdmin && <TabsContent value="holidays"><Holidays /></TabsContent>}
       </Tabs>

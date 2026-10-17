@@ -17,7 +17,7 @@ export const AHEAD_DAYS = 7;
 
 export async function checklistCalendar(ctx: Ctx): Promise<Calendar> {
   const off = new Set(str(ctx.setting("WEEKLY_OFF", "0")).split(",").map((x) => x.trim()).filter((x) => /^[0-6]$/.test(x)).map(Number));
-  const holidays = new Set((await ctx.tx.rows("Holidays")).filter((h) => h.deleted !== "Y" && !h.flowId).map((h) => String(h.date)));
+  const holidays = new Set((await ctx.tx.rows("Holidays")).filter((h) => h.deleted !== "Y" && h.published !== "N" && !h.flowId).map((h) => String(h.date)));
   return { off, holidays };
 }
 

@@ -61,7 +61,7 @@ export interface FlowComment { commentId: string; itemId: string; flowId: string
 export type RequestStatus = "Pending" | "Approved" | "Rejected";
 export interface FlowRequest {
   requestId: string; taskId: string; itemId: string; flowId: string; requestedBy: string; newPlanned: string; reason: string;
-  status: RequestStatus; decidedBy: string; decidedAt: string; note: string; createdAt: string;
+  status: RequestStatus; decidedBy: string; decidedAt: string; note: string; createdAt: string; kind?: string;
 }
 export interface Notification {
   notifId: string; userId: string; type: string; title: string; body: string; link: string; itemId: string; taskId: string;
@@ -84,7 +84,7 @@ export interface ChecklistEntry {
 }
 export interface Holiday { holidayId: string; date: string; label: string; flowId: string }
 export interface Absence { absenceId: string; userId: string; fromDate: string; toDate: string; backupUserId: string; reason: string; createdBy: string; createdAt: string }
-export interface FlowUser { userId: string; name: string; role: string; status: string; managerId?: string; notify?: string; mobile?: string; email?: string; department?: string; empCode?: string; leaveAllot?: number; photoVer?: string }
+export interface FlowUser { userId: string; name: string; role: string; status: string; managerId?: string; notify?: string; mobile?: string; email?: string; department?: string; empCode?: string; leaveAllot?: number; photoVer?: string; exitDate?: string; exitType?: string; exitDone?: string; exitReason?: string; exitHandover?: string; exitBy?: string; deleted?: string }
 export interface QuickLink { linkId: string; ownerId: string; title: string; url: string; category: string; favorite: string; sortOrder: number; createdBy: string; createdAt: string; updatedAt: string }
 export interface SavedFilter { filterId: string; userId: string; page: string; name: string; paramsJson: string; isDefault: string; shared: string; createdAt: string; updatedAt: string }
 export interface RoleInfo { roleId: string; name: string; description: string; base: string; system: boolean; customized: boolean; perms: PermSet; people: number }

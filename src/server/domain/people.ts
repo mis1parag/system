@@ -50,7 +50,7 @@ export async function addHolidays(ctx: Ctx, d: Record<string, unknown>) {
     require_(isDate(dt), `"${dt}" is not a valid date (use yyyy-MM-dd)`);
     if (have.has(`${dt}|${flowId}`)) { skipped++; continue; }
     have.add(`${dt}|${flowId}`);
-    ctx.tx.insert("Holidays", { holidayId: newId("HOL"), date: dt, label: str(d.label), flowId, deleted: "" });
+    ctx.tx.insert("Holidays", { holidayId: newId("HOL"), date: dt, label: str(d.label), flowId, deleted: "", published: d.published === false ? "N" : "Y", note: "" });
     added++;
   }
   const replanned = await replanAffected(ctx, flowId);

@@ -81,6 +81,7 @@ export interface NewEntry {
   data: Record<string, unknown>; createdAt?: string; anchorDate?: string; originalAnchor?: string; postponeCount?: number; postponeReason?: string;
   priority?: string; tags?: string; source?: string; actuals?: Record<string, string>; status?: string; createdBy?: string;
   /** who may see it besides the people working on it: assigned (default) · department · users · management */ visibility?: string; visibleTo?: string;
+  /** choose who does a step for THIS entry (stepId → person), instead of the FMS's own rule */ assignees?: Record<string, string>;
 }
 
 /** Shared by manual entry, CSV / workbook import, the Google-Form intake and recurring entries. */
@@ -130,7 +131,8 @@ export async function addEntries(ctx: Ctx, flowId: string, rows: NewEntry[], opt
         visibility: cleanVisibility(r.visibility), visibleTo: cleanVisibility(r.visibility) === "users" ? cleanUsers(r.visibleTo) : "", department: String(ctx.actor.department ?? ""),
       };
       const tasks: Rec[] = flow.steps.map((s, i) => {
-        const assignee = pickAssignee(s, data, { openLoad, stepCount: stepCount.get(s.stepId) ?? 0 }, users);
+        const chosen = str(r.assignees?.[s.stepId]);
+        const assignee = chosen && users.has(chosen) ? chosen : pickAssignee(s, data, { openLoad, stepCount: stepCount.get(s.stepId) ?? 0 }, users);
         stepCount.set(s.stepId, (stepCount.get(s.stepId) ?? 0) + 1);
         openLoad.set(assignee, (openLoad.get(assignee) ?? 0) + 1);
         const given = normDT(r.actuals?.[s.stepId]);
@@ -162,7 +164,19 @@ export async function createEntry(ctx: Ctx, d: Record<string, unknown>) {
   ctx.require("fms", "create", "You cannot add entries");
   const fl = await ctx.flow(str(d.flowId));
   forbid(flowVisible(fl.rec as never, { ...ctx.actor, userId: ctx.actorId } as never, (await ctx.reach("fms")).all) || ctx.system, "This FMS is not available to you");
-  const { added } = await addEntries(ctx, str(d.flowId), [{ data: (d.data ?? {}) as Record<string, unknown>, priority: str(d.priority) || undefined, tags: str(d.tags), source: str(d.source) || "manual", visibility: str(d.visibility), visibleTo: str(d.visibleTo) }]);
+  // who does which step of this entry: only people who may assign work, and only people inside their reach
+  const assignees: Record<string, string> = {};
+  for (const [stepId, uid] of Object.entries((d.assignees ?? {}) as Record<string, unknown>)) {
+    const id = str(uid);
+    if (!id) continue;
+    ctx.require("fms", "assign", "You cannot choose who does a step");
+    const reach = await ctx.reach("fms");
+    const u = await ctx.user(id);
+    require_(u && u.status === "Active" && u.deleted !== "Y", "Choose active people for the steps");
+    forbid(reach.all || reach.ids.has(id), "That person is outside your access");
+    assignees[stepId] = id;
+  }
+  const { added } = await addEntries(ctx, str(d.flowId), [{ data: (d.data ?? {}) as Record<string, unknown>, priority: str(d.priority) || undefined, tags: str(d.tags), source: str(d.source) || "manual", visibility: str(d.visibility), visibleTo: str(d.visibleTo), assignees }]);
   return pub("Flow_Items", added[0]);
 }
 

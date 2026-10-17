@@ -10,7 +10,7 @@ export type Data = Record<string, string | number | boolean | null | undefined>;
 
 export function calendarFor(flow: Flow, holidays: Rec[]): Calendar {
   const set = new Set<string>();
-  for (const h of holidays) if (h.deleted !== "Y" && (!h.flowId || h.flowId === flow.flowId)) set.add(String(h.date));
+  for (const h of holidays) if (h.deleted !== "Y" && h.published !== "N" && (!h.flowId || h.flowId === flow.flowId)) set.add(String(h.date));
   return { off: new Set(flow.weeklyOff), holidays: set };
 }
 

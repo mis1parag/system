@@ -8,7 +8,8 @@ import { LeaveDialog } from "@/components/attendance/attendance-dialogs";
 import { usePunch } from "@/components/attendance/punch-card";
 import { useAttendance } from "@/components/attendance/use-attendance";
 import { Pill, Section, Spinner, StatCard } from "@/components/common";
-import { fmtHours, leaveBalance, STATUS_LABEL } from "@/lib/attendance";
+import { fmtHours, STATUS_LABEL } from "@/lib/attendance";
+import { BalanceLine, useYearBalance } from "@/components/attendance/leave-year";
 import { addMinutes, fmtDate, monthEnd, monthStart } from "@/lib/dates";
 import { useFlows } from "@/lib/flow-store";
 import { pct1 } from "@/lib/format";
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 /** "Mark my attendance": check in / out with an optional photo, today's status worked out live, this month, and leave. */
 export function MarkTab() {
-  const { data, meId, today, now } = useFlows();
+  const { meId, today, now, holidayName } = useFlows();
   const att = useAttendance();
   const p = usePunch();
   const [photoOn, setPhotoOn] = useState(false);
@@ -29,14 +30,13 @@ export function MarkTab() {
 
   const day = att.days(meId, today, today)[0];
   const rep = useMemo(() => att.person(meId, monthStart(today.slice(0, 7)), today), [att, meId, today]);
-  const me = data?.users.find((u) => u.userId === meId);
-  const bal = leaveBalance(Number(me?.leaveAllot) || 0, att.leaves, meId, today.slice(0, 4));
+  const bal = useYearBalance(meId, today.slice(0, 4));
   const myLeaves = [...att.leaves].filter((l) => l.userId === meId).sort((a, b) => b.startDate.localeCompare(a.startDate)).slice(0, 3);
 
   const liveH = p.liveMin / 60;
   const { fullHours, halfHours } = att.set;
   const off = day.status === "off" || day.status === "holiday";
-  const live = off ? (liveH > 0 ? "Working on a day off" : STATUS_LABEL[day.status]) : liveH >= fullHours ? "Present (full day)" : liveH >= halfHours ? "Half day so far" : p.state === "out" ? "Not checked in" : "In progress";
+  const live = off ? (liveH > 0 ? "Working on a day off" : day.status === "holiday" ? `Holiday — ${holidayName(today)}` : STATUS_LABEL[day.status]) : liveH >= fullHours ? "Present (full day)" : liveH >= halfHours ? "Half day so far" : p.state === "out" ? "Not checked in" : "In progress";
   const liveTone = liveH >= fullHours ? "green" : liveH >= halfHours ? "amber" : p.state === "out" ? "gray" : "blue";
   const toFull = Math.max(0, fullHours * 60 - p.liveMin);
   const fullAt = p.open && toFull > 0 ? addMinutes(n, toFull).slice(11) : "";
@@ -113,7 +113,7 @@ export function MarkTab() {
         <Section title="Leave" hint="Ask for a day off, half day or short leave">
           <div className="grid gap-2">
             <Button onClick={() => setAsking(true)}><CalendarPlusIcon /> Apply for leave</Button>
-            {bal.allot > 0 ? <p className="text-sm text-muted-foreground"><b className="text-foreground">{bal.left}</b> of {bal.allot} days left in {today.slice(0, 4)} · {bal.used} used{bal.pending ? ` · ${bal.pending} waiting` : ""}</p> : <p className="text-xs text-muted-foreground">No yearly leave limit is set for you.</p>}
+            <BalanceLine b={bal} year={today.slice(0, 4)} />
             {myLeaves.map((l) => (
               <div key={l.leaveId} className="flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs">
                 <Pill tone={l.status === "Approved" ? "green" : l.status === "Rejected" ? "red" : l.status === "Pending" ? "amber" : "gray"}>{l.status}</Pill>

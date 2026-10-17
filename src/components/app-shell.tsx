@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  BellIcon, CalendarCheck2Icon, CalendarOffIcon, CheckCheckIcon, ClipboardCheckIcon, GaugeIcon, HelpCircleIcon, HistoryIcon, InboxIcon, LayoutDashboardIcon,
+  AwardIcon, BellIcon, BellRingIcon, WrenchIcon, CalendarCheck2Icon, CalendarDaysIcon, NotebookPenIcon, UsersRoundIcon, CalendarOffIcon, CheckCheckIcon, ClipboardCheckIcon, GaugeIcon, HelpCircleIcon, HistoryIcon, InboxIcon, LayoutDashboardIcon,
   KeyRoundIcon, ListChecksIcon, LockIcon, LogOutIcon, MenuIcon, ScanFaceIcon, SearchIcon, SettingsIcon, ShieldCheckIcon, SlidersHorizontalIcon, TrophyIcon, UserCogIcon, UsersIcon, WorkflowIcon, ZapIcon, type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
@@ -24,10 +24,10 @@ interface NavItem { href: string; label: string; short?: string; hint: string; i
 function requirement(path: string): [ModuleId, Action] | "super" | null {
   const p = path.replace(/\/$/, "");
   const exact: Record<string, [ModuleId, Action] | "super"> = {
-    "/flows/tasks": ["fms", "view"], "/flows/approvals": ["fms", "view"], "/flows/search": ["fms", "view"], "/flows/new": ["fms", "configure"], "/flows": ["fms", "view"],
+    "/flows/tasks": ["fms", "view"], "/flows/search": ["fms", "view"], "/flows/new": ["fms", "configure"], "/flows": ["fms", "view"],
     "/flows/checklist": ["checklist", "view"], "/flows/attendance": ["attendance", "view"], "/flows/team": ["attendance", "view"], "/flows/kiosk": ["attendance", "manage"],
     "/flows/scorecard": ["scorecard", "view"], "/flows/insights": ["reports", "view"], "/flows/vault": ["vault", "view"], "/flows/quick": ["quick_access", "view"],
-    "/flows/users": ["employees", "view"], "/flows/audit": ["audit", "view"], "/flows/settings": "super", "/flows/access": "super", "/flows/admin": "super",
+    "/flows/users": ["employees", "view"], "/flows/holidays": ["attendance", "view"], "/flows/myteam": ["attendance", "view"], "/flows/reminders": ["reminders", "view"], "/flows/audit": ["audit", "view"], "/flows/settings": "super", "/flows/access": "super", "/flows/admin": "super", "/flows/console": "super",
   };
   if (exact[p]) return exact[p];
   if (/^\/flows\/[^/]+\/edit$/.test(p)) return ["fms", "configure"];
@@ -42,22 +42,24 @@ const GROUPS: NavGroup[] = [
     title: "",
     items: [
       { href: "/flows/panel", label: "Home", short: "Home", hint: "Today at a glance: what is late, what needs a decision", icon: LayoutDashboardIcon },
-      { href: "/flows/tasks", label: "My tasks", short: "Tasks", hint: "Steps of your FMS that are waiting for you", icon: ListChecksIcon, module: "fms" },
+      { href: "/flows/tasks", label: "FMS tasks", short: "FMS tasks", hint: "Steps of your FMS that are waiting for you", icon: ListChecksIcon, module: "fms" },
       { href: "/flows/checklist", label: "Checklist", short: "Checklist", hint: "Daily, weekly, monthly and one-time tasks — tick them off", icon: ClipboardCheckIcon, module: "checklist" },
       { href: "/flows/attendance", label: "Attendance", short: "Attendance", hint: "Check in and out, your month, apply for leave", icon: CalendarCheck2Icon, module: "attendance" },
       { href: "/flows/quick", label: "Quick access", short: "Quick", hint: "One-click shortcuts to the tools you use", icon: ZapIcon, module: "quick_access" },
+      { href: "/flows/notes", label: "My notes", short: "Notes", hint: "Your private notepad — nobody else can see it", icon: NotebookPenIcon },
     ],
   },
   {
     title: "Processes",
     items: [
       { href: "/flows", label: "FMS", short: "FMS", hint: "Every process: PO dispatch, CRM orders, hiring… open one and start an entry", icon: WorkflowIcon, module: "fms" },
-      { href: "/flows/approvals", label: "Approvals", hint: "Requests for more time waiting for a decision", icon: InboxIcon, badge: "approvals", module: "fms" },
+      { href: "/flows/approvals", label: "Approvals", hint: "Requests for more time — FMS steps and checklist tasks", icon: InboxIcon, badge: "approvals" },
     ],
   },
   {
     title: "Reports",
     items: [
+      { href: "/flows/leaderboard", label: "Leaderboard", short: "Leaders", hint: "This month: who came on time and finished their work", icon: AwardIcon },
       { href: "/flows/scorecard", label: "Scorecard", short: "Scorecard", hint: "% work not done and not done on time, per person per week", icon: TrophyIcon, module: "scorecard" },
       { href: "/flows/insights", label: "Insights", hint: "Who delivers on time, which FMS runs late", icon: GaugeIcon, module: "reports" },
     ],
@@ -65,8 +67,11 @@ const GROUPS: NavGroup[] = [
   {
     title: "People",
     items: [
+      { href: "/flows/myteam", label: "My team", short: "Team", hint: "Attendance, work and leave of the people who report to you", icon: UsersRoundIcon, module: "attendance", reach: true },
+      { href: "/flows/reminders", label: "Reminders", short: "Reminders", hint: "Reminders sent to you — and, for managers, to your team", icon: BellRingIcon, module: "reminders" },
       { href: "/flows/users", label: "Team & profiles", short: "Team", hint: "People, departments, who reports to whom, photos and details", icon: UsersIcon, module: "employees", reach: true },
-      { href: "/flows/team", label: "Absence & holidays", short: "Absence", hint: "Cover for someone who is away, and add holidays", icon: CalendarOffIcon, module: "attendance" },
+      { href: "/flows/holidays", label: "Holidays", short: "Holidays", hint: "Company holidays, year by year", icon: CalendarDaysIcon, module: "attendance" },
+      { href: "/flows/team", label: "Absence cover", short: "Absence", hint: "Cover for someone who is away", icon: CalendarOffIcon, module: "attendance" },
     ],
   },
   {
@@ -79,6 +84,7 @@ const GROUPS: NavGroup[] = [
     title: "Admin",
     items: [
       { href: "/flows/admin", label: "Control center", hint: "Everything the Super Admin decides, and what needs attention", icon: SlidersHorizontalIcon, super: true },
+      { href: "/flows/console", label: "Super Admin console", short: "Console", hint: "Correct any record by hand, restore deleted rows, data checks, announcements", icon: WrenchIcon, super: true },
       { href: "/flows/access", label: "Access & roles", hint: "Decide what a Manager and a User can do", icon: ShieldCheckIcon, super: true },
       { href: "/flows/settings", label: "Settings", hint: "Company rules, attendance, reminders, scorecard benchmark", icon: SettingsIcon, super: true },
       { href: "/flows/kiosk", label: "Attendance kiosk", short: "Kiosk", hint: "Reception screen: staff scan their ID to check in / out with a photo", icon: ScanFaceIcon, module: "attendance", action: "manage" },
@@ -106,15 +112,17 @@ function NoAccess() {
 export function AppShell({ user, children }: { user: { userId: string; name: string; role: Role }; children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data, call } = useFlows();
+  const { data, call, refresh } = useFlows();
   const [more, setMore] = useState(false);
   const [inbox, setInbox] = useState(false);
   const [find, setFind] = useState(false);
   const role = (data?.me.role as Role | undefined) ?? user.role;
   const groups = useMemo(() => {
-    const allowed = (n: NavItem) => (!n.module || !!data?.perms?.[n.module]?.a.includes(n.action ?? "view")) && (!n.reach || (data?.reach?.[n.module!]?.all ?? false) || (data?.reach?.[n.module!]?.ids.length ?? 0) > 1) && (!n.super || role === "SUPER_ADMIN");
+    const hasFlow = role === "SUPER_ADMIN" || (data?.flows ?? []).length > 0; // an FMS tab for somebody who has been given no FMS would only lead to an empty page
+    const has = (m: ModuleId) => !!data?.perms?.[m]?.a.includes("view");
+    const allowed = (n: NavItem) => (n.href !== "/flows/approvals" || (has("fms") && hasFlow) || has("checklist")) && (!(n.module === "fms" && n.href !== "/flows/search") || hasFlow) && (!n.module || !!data?.perms?.[n.module]?.a.includes(n.action ?? "view")) && (!n.reach || (data?.reach?.[n.module!]?.all ?? false) || (data?.reach?.[n.module!]?.ids.length ?? 0) > 1) && (!n.super || role === "SUPER_ADMIN");
     return GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
-  }, [role, data?.perms, data?.reach]);
+  }, [role, data?.perms, data?.reach, data?.flows]);
   const flat = useMemo(() => [...groups.flatMap((g) => g.items), ...FOOT], [groups]);
   const pendingApprovals = (data?.requests ?? []).filter((r) => r.status === "Pending").length;
   const unread = data?.unread ?? 0;
@@ -154,7 +162,11 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
   const tabs = ["/flows/panel", "/flows/tasks", "/flows/checklist", "/flows/attendance", "/flows/quick"].map((h) => flat.find((n) => n.href === h)).filter((n): n is NavItem => !!n).slice(0, 3);
   const need = requirement(pathname);
   const denied = !!data && need !== null && (need === "super" ? role !== "SUPER_ADMIN" : !data.perms?.[need[0]]?.a.includes(need[1]));
+  // a page the person was just given access to (a shared login, a new role): look again once before saying "no access"
+  const askedAgain = useRef("");
+  useEffect(() => { if (denied && askedAgain.current !== pathname) { askedAgain.current = pathname; refresh(); } }, [denied, pathname, refresh]);
   const company = data?.settings?.COMPANY_NAME || "MIDAP";
+  const myCode = data?.users.find((u) => u.userId === data.me.userId)?.empCode ?? "";
 
   return (
     <div className="min-h-dvh md:pl-60">
@@ -177,7 +189,7 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
         <div className="border-t border-sidebar-border px-2.5 py-2">{FOOT.map((n) => link(n))}</div>
         <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-2.5">
           <Avatar userId={data?.me.userId ?? user.userId} size={32} />
-          <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-foreground">{data?.me.name ?? user.name}</div><div className="truncate text-xs text-muted-foreground">{ROLE_LABEL[role]}{data?.me.department ? ` · ${data.me.department}` : ""}</div></div>
+          <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-foreground">{data?.me.name ?? user.name}</div><div className="truncate text-xs text-muted-foreground">{ROLE_LABEL[role]}{data?.me.department ? ` · ${data.me.department}` : ""}</div>{myCode && <div className="truncate text-[11px] tabular-nums text-muted-foreground">ID {myCode}</div>}</div>
           <button onClick={logout} aria-label="Sign out" title="Sign out" className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><LogOutIcon className="size-4" /></button>
         </div>
       </aside>

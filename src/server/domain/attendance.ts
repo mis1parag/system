@@ -1,6 +1,7 @@
 /** Attendance (check-in / check-out with optional GPS) and leave requests with approval. Reports are worked out in the browser from these rows (src/lib/attendance.ts). */
 import { LEAVE_TYPES } from "../../lib/flow-types.ts";
-import { leaveBalance, leaveDays } from "../../lib/attendance.ts";
+import { calFrom, leaveDays, leaveDaysInYear } from "../../lib/attendance.ts";
+import { balanceOf } from "./leave-year.ts";
 import { allows, reachOf, scopeOfGrant } from "../../lib/permissions.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { checklistCalendar } from "./checklist.ts";
@@ -187,9 +188,16 @@ export async function requestLeave(ctx: Ctx, d: Record<string, unknown>) {
   const leaves = await ctx.tx.rows("Leaves");
   const clash = leaves.find((l) => l.userId === userId && (l.status === "Pending" || l.status === "Approved") && String(l.startDate) <= end && String(l.endDate) >= start);
   require_(!clash, `There is already a ${String(clash?.status).toLowerCase()} leave on ${clash?.startDate}${clash?.endDate !== clash?.startDate ? ` – ${clash?.endDate}` : ""}`);
-  const year = start.slice(0, 4);
-  const bal = leaveBalance(Number(user.leaveAllot) || 0, leaves as unknown as Parameters<typeof leaveBalance>[1], userId, year);
-  if (bal.allot > 0 && bal.used + bal.pending + days > bal.allot) ctx.warnings.push(`This is more than the ${bal.allot} leave days allotted for ${year} (${bal.used} used, ${bal.pending} waiting). It can still be requested.`);
+  // each calendar year has its own balance: check every year the leave touches
+  for (let y = Number(start.slice(0, 4)); y <= Number(end.slice(0, 4)); y++) {
+    const year = String(y), bal = await balanceOf(ctx, userId, year);
+    const here = leaveDaysInYear({ type: type as "Full Day", startDate: start, endDate: end, days }, year, calFrom(ctx.settings, (await ctx.tx.rows("Holidays")).filter((h) => h.deleted !== "Y" && h.published !== "N") as unknown as { date: string }[]));
+    if (here > 0 && bal.total > 0 && bal.used + bal.pending + here > bal.total) {
+      const msg = `This is more than the ${bal.total} leave days you have for ${year} (${bal.used} used, ${bal.pending} waiting, ${here} requested).`;
+      require_(ctx.setting("LEAVE_BLOCK_OVERDRAW", "N") !== "Y" || ctx.allow("attendance", "manage"), msg + " Ask your manager to change the balance first.");
+      ctx.warnings.push(msg + " It can still be requested.");
+    }
+  }
   const rec = ctx.tx.insert("Leaves", { leaveId: newId("LVE"), userId, type, startDate: start, endDate: end, days, reason: str(d.reason).slice(0, 300), backupUserId: backupId, status: "Pending", decidedBy: "", decidedAt: "", note: "", createdAt: ctx.clock.stamp });
   ctx.tx.audit("Leave requested", "Leaves", String(rec.leaveId), null, { user: user.name, type, start, end, days });
   const everyone = await ctx.tx.rows("Users");

@@ -16,7 +16,9 @@ import { applyFilters, type FieldDef } from "@/lib/filters";
 import { DayDialog, LeaveDialog } from "@/components/attendance/attendance-dialogs";
 import { MarkTab } from "@/components/attendance/mark-tab";
 import { useAttendance } from "@/components/attendance/use-attendance";
-import { fmtHours, leaveBalance, STATUS_LABEL, type DayStatus } from "@/lib/attendance";
+import { fmtHours, STATUS_LABEL, type DayStatus } from "@/lib/attendance";
+import { BalanceLine, LeaveYearPanel, useYearBalance } from "@/components/attendance/leave-year";
+import { SalaryPanel } from "@/components/payroll/salary-panel";
 import { addMonths, fmtDate, fmtMonth, monthEnd, monthStart } from "@/lib/dates";
 import { useFlows } from "@/lib/flow-store";
 import { pct1 } from "@/lib/format";
@@ -30,18 +32,19 @@ const CELL: Record<DayStatus, string> = {
 const LEAVE_TONE = { Pending: "amber", Approved: "green", Rejected: "red", Cancelled: "gray" } as const;
 
 export default function AttendancePage() {
-  const { meId, peopleFor } = useFlows();
+  const { meId, peopleFor, has, userById } = useFlows();
+  const empCode = userById(meId)?.empCode ?? "";
   const people = peopleFor("attendance");
   const sp = useSearchParams();
   const [tabPick, setTab] = useState<string | null>(null);
-  const [person, setPerson] = useState("");
+  const [person, setPerson] = useState(sp.get("person") ?? "");
   const tab = tabPick ?? sp.get("tab") ?? "mark";
   const sees = people.length > 1; // somebody else is in reach (a manager's team, a department)
   return (
     <>
       <PageHeader
         title="Attendance"
-        subtitle="Mark your attendance, see your month, apply for leave."
+        subtitle={`Mark your attendance, see your month, apply for leave.${empCode ? ` Your Employee ID: ${empCode}` : ""}`}
         help={{ id: "attendance", title: "How attendance is counted", text: "6 hours or more = a full day, 4 hours or more = a half day, less = absent. Check-in after 09:30 is late, check-out before 17:00 is early. Sundays and holidays are not working days (Sunday work of 4 hours+ counts as overtime). All of this can be changed in Settings." }}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
@@ -51,12 +54,14 @@ export default function AttendancePage() {
           {sees && <TabsTrigger value="today">Team today</TabsTrigger>}
           {sees && <TabsTrigger value="report">Monthly report</TabsTrigger>}
           <TabsTrigger value="leave">Leave</TabsTrigger>
+          {has("payroll") && <TabsTrigger value="salary">Salary slip</TabsTrigger>}
         </TabsList></div>
         <TabsContent value="mark"><MarkTab /></TabsContent>
         <TabsContent value="me"><MyMonth person={person || meId} onPerson={setPerson} /></TabsContent>
         {sees && <TabsContent value="today"><Today onOpen={(id) => { setPerson(id); setTab("me"); }} /></TabsContent>}
         {sees && <TabsContent value="report"><Report onOpen={(id) => { setPerson(id); setTab("me"); }} /></TabsContent>}
         <TabsContent value="leave"><Leave /></TabsContent>
+        {has("payroll") && <TabsContent value="salary"><SalaryPanel /></TabsContent>}
       </Tabs>
     </>
   );
@@ -73,7 +78,7 @@ function MonthNav({ month, onChange, max }: { month: string; onChange: (m: strin
 }
 
 function MyMonth({ person, onPerson }: { person: string; onPerson: (id: string) => void }) {
-  const { data, meId, peopleFor, today, userName } = useFlows();
+  const { data, meId, peopleFor, today, userName, holidayName } = useFlows();
   const people = peopleFor("attendance");
   const att = useAttendance();
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -82,7 +87,7 @@ function MyMonth({ person, onPerson }: { person: string; onPerson: (id: string) 
   const rep = useMemo(() => att.person(person, from, to), [att, person, from, to]);
   const lead = (new Date(from + "T00:00:00Z").getUTCDay() + 6) % 7; // Monday first
   const u = data?.users.find((x) => x.userId === person);
-  const bal = leaveBalance(Number(u?.leaveAllot) || 0, att.leaves, person, month.slice(0, 4));
+  const bal = useYearBalance(person, month.slice(0, 4));
 
   return (
     <>
@@ -106,9 +111,10 @@ function MyMonth({ person, onPerson }: { person: string; onPerson: (id: string) 
         <div className="grid grid-cols-7 gap-1">
           {Array.from({ length: lead }, (_, i) => <div key={`l${i}`} />)}
           {rep.days.map((d) => (
-            <button key={d.date} onClick={() => d.status !== "future" && setDay(d.date)} disabled={d.status === "future"} title={`${fmtDate(d.date, true)} — ${STATUS_LABEL[d.status]}${d.hours ? ` · ${fmtHours(d.hours)}` : ""}${d.firstIn ? ` · ${d.firstIn.slice(11)}–${d.lastOut ? d.lastOut.slice(11) : "…"}` : ""}`}
+            <button key={d.date} onClick={() => d.status !== "future" && setDay(d.date)} disabled={d.status === "future"} title={`${fmtDate(d.date, true)} — ${d.status === "holiday" ? holidayName(d.date) : STATUS_LABEL[d.status]}${d.hours ? ` · ${fmtHours(d.hours)}` : ""}${d.firstIn ? ` · ${d.firstIn.slice(11)}–${d.lastOut ? d.lastOut.slice(11) : "…"}` : ""}`}
               className={cn("flex min-h-14 flex-col items-center justify-start gap-0.5 rounded-lg border p-1 text-xs", CELL[d.status], d.date === today && "ring-2 ring-primary")}>
               <span className="font-semibold">{Number(d.date.slice(8))}</span>
+              {d.status === "holiday" && <span className="line-clamp-2 text-[9px] font-medium leading-tight">{holidayName(d.date)}</span>}
               {d.status !== "future" && d.status !== "off" && d.status !== "holiday" && <span className="text-[10px] leading-tight">{d.hours ? fmtHours(d.hours).replace(" ", "") : STATUS_LABEL[d.status]}</span>}
               <span className="flex gap-0.5 text-[9px] leading-none">{d.late && "L"}{d.early && "E"}{d.overtime && "OT"}{d.missingOut && "?"}</span>
             </button>
@@ -119,7 +125,7 @@ function MyMonth({ person, onPerson }: { person: string; onPerson: (id: string) 
           <span>L = late · E = early out · OT = overtime · ? = no check-out</span>
         </div>
       </Section>
-      {bal.allot > 0 && <p className="mt-3 text-xs text-muted-foreground">Leave {month.slice(0, 4)}: {bal.allot} allotted · {bal.used} used · {bal.pending} waiting · <b className="text-foreground">{bal.left} left</b></p>}
+      <div className="mt-3"><BalanceLine b={bal} year={month.slice(0, 4)} /></div>
       {day && <DayDialog userId={person} date={day} onClose={() => setDay("")} />}
     </>
   );
@@ -219,9 +225,9 @@ function Leave() {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState<Record<string, string>>({});
-  const me = data?.users.find((u) => u.userId === meId);
-  const bal = leaveBalance(Number(me?.leaveAllot) || 0, att.leaves, meId, today.slice(0, 4));
-  const mine = [...att.leaves].filter((l) => l.userId === meId).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const [year, setYear] = useState(today.slice(0, 4));
+  const mine = [...att.leaves].filter((l) => l.userId === meId && l.startDate.slice(0, 4) <= year && l.endDate.slice(0, 4) >= year).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const stamp = att.leaves.map((l) => l.leaveId + l.status).join("|");
   const canDecide = (uid: string) => isSuper || data?.users.find((u) => u.userId === uid)?.managerId === meId || (can("approveLeave") && inReach(uid));
   const waiting = att.leaves.filter((l) => l.status === "Pending" && l.userId !== meId && canDecide(l.userId)).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const recent = can("approveLeave") ? [...att.leaves].filter((l) => l.userId !== meId && l.status !== "Pending").sort((a, b) => b.startDate.localeCompare(a.startDate)).slice(0, 25) : [];
@@ -236,10 +242,8 @@ function Leave() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => setAsking(true)}><CalendarPlusIcon /> Ask for leave</Button>
-        {bal.allot > 0 ? <span className="text-sm text-muted-foreground">{today.slice(0, 4)}: <b className="text-foreground">{bal.left}</b> of {bal.allot} days left · {bal.used} used{bal.pending ? ` · ${bal.pending} waiting` : ""}</span> : <span className="text-xs text-muted-foreground">No yearly leave limit is set for you.</span>}
-      </div>
+      <div className="flex flex-wrap items-center gap-3"><Button onClick={() => setAsking(true)}><CalendarPlusIcon /> Ask for leave</Button></div>
+      <LeaveYearPanel year={year} onYear={setYear} refreshKey={stamp} />
       {waiting.length > 0 && (
         <Section title={`Waiting for your decision (${waiting.length})`}>
           <div className="grid gap-2">{waiting.map((l) => (
@@ -255,7 +259,7 @@ function Leave() {
           ))}</div>
         </Section>
       )}
-      <Section title="My leave requests">
+      <Section title={`My leave requests ${year}`}>
         {mine.length === 0 ? <p className="py-3 text-center text-sm text-muted-foreground">No requests yet.</p> : (
           <div className="grid gap-1.5">{mine.slice(0, 30).map((l) => (
             <div key={l.leaveId} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">

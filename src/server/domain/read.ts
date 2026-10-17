@@ -39,7 +39,7 @@ function visibleItems(ctx: Ctx, reach: Reach, t: Record<string, Rec[]>) {
 export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: boolean) {
   const t = await ctx.db.load(FLOW_TABLES);
   const flowId = str(p.flowId);
-  const reach = { fms: await ctx.reach("fms"), checklist: await ctx.reach("checklist"), attendance: await ctx.reach("attendance"), scorecard: await ctx.reach("scorecard"), employees: await ctx.reach("employees"), reports: await ctx.reach("reports"), audit: await ctx.reach("audit") };
+  const reach = { fms: await ctx.reach("fms"), checklist: await ctx.reach("checklist"), attendance: await ctx.reach("attendance"), scorecard: await ctx.reach("scorecard"), employees: await ctx.reach("employees"), reports: await ctx.reach("reports"), audit: await ctx.reach("audit"), payroll: await ctx.reach("payroll"), reminders: await ctx.reach("reminders") };
   const has = (m: ModuleId) => ctx.allow(m, "view");
   // the Super Admin always gets the complete history; everyone else gets open entries + the last 90 days (and can load more per FMS)
   const all = p.all === true || p.all === "true" || p.all === "1" || ctx.isSuper;
@@ -58,12 +58,16 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
     return i.status === "Open" || String(i.completedAt || i.updatedAt).slice(0, 10) >= since;
   });
   const ids = new Set(items.map((i) => i.itemId));
-  const tasks = t.Flow_Tasks.filter((x) => ids.has(x.itemId));
+  // an entry may involve several people, but each person gets only THEIR steps (and the steps of people inside their reach) — not what a colleague has to do
+  const tasks = t.Flow_Tasks.filter((x) => ids.has(x.itemId) && (reach.fms.all || reach.fms.ids.has(String(x.assigneeId)) || reach.fms.ids.has(String(x.doneBy))));
 
   const recent = addDays(ctx.clock.date, -60);
   const userById = new Map(t.Users.map((u) => [String(u.userId), u]));
   const reachReq = (r: Rec) => r.requestedBy === ctx.actorId || userById.get(String(r.requestedBy))?.managerId === ctx.actorId || (ctx.allow("fms", "approve") && (reach.fms.all || reach.fms.ids.has(String(r.requestedBy))));
-  const requests = has("fms") ? t.Requests.filter((r) => vis.flowOk.has(String(r.flowId)) && reachReq(r) && (r.status === "Pending" || String(r.decidedAt).slice(0, 10) >= addDays(ctx.clock.date, -14))) : [];
+  const recentReq = (r: Rec) => r.status === "Pending" || String(r.decidedAt).slice(0, 10) >= addDays(ctx.clock.date, -14);
+  // "more time" for checklist tasks: the person who asked, their reporting manager, the Super Admin and people who manage that person's checklist
+  const reachClReq = (r: Rec) => r.requestedBy === ctx.actorId || userById.get(String(r.requestedBy))?.managerId === ctx.actorId || ctx.isSuper || (ctx.allow("checklist", "manage") && (reach.checklist.all || reach.checklist.ids.has(String(r.requestedBy))));
+  const requests = t.Requests.filter((r) => (r.kind === "checklist" ? reachClReq(r) : has("fms") && vis.flowOk.has(String(r.flowId)) && reachReq(r)) && recentReq(r));
 
   // ---- notifications: only about modules the person can open
   const notes = t.Notifications.filter((n) => n.userId === ctx.actorId).filter((n) => { const m = moduleOfNotification(n as { link?: unknown; type?: unknown }); return !m || has(m); }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -84,6 +88,7 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
   // ---- people: names for everyone (pickers); contact details only inside reach for those who may manage people
   const inEmp = (id: unknown) => reach.employees.all || reach.employees.ids.has(String(id));
   const seesContacts = ctx.allow("employees", "edit") || ctx.allow("employees", "manage");
+  const canExit = ctx.allow("employees", "delete");
   const departments = [...new Set(t.Users.filter((u) => u.status === "Active").map((u) => str(u.department)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   // ---- quick access and saved filters
@@ -98,11 +103,20 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
     live, counts, serverDate: ctx.clock.date, serverTime: ctx.clock.time,
     me: { ...pub("Users", ctx.actor), roleId: ctx.actor.roleId },
     flows: t.Flows.filter((f) => vis.flowOk.has(String(f.flowId))).map((f) => pub("Flows", f)),
-    holidays: t.Holidays.filter((h) => h.deleted !== "Y").map((h) => pub("Holidays", h)),
+    holidays: t.Holidays.filter((h) => h.deleted !== "Y" && (h.published !== "N" || ctx.allow("attendance", "configure"))).map((h) => pub("Holidays", h)),
     absences: t.Absences.filter((a) => a.deleted !== "Y" && String(a.toDate) >= recent && (inAtt(a.userId) || a.backupUserId === ctx.actorId || a.userId === ctx.actorId)).map((a) => pub("Absences", a)),
+    // people: everyone's NAME (to pick a colleague as backup, buddy or assignee) — but role, Employee ID, reporting manager and leave figures only for yourself,
+    // your own manager and the people who are inside your reach in some module. A Team Member's list therefore holds nothing about unrelated colleagues.
     users: t.Users.map((u) => {
-      const o: Record<string, unknown> = { userId: u.userId, name: u.name, role: u.role, status: u.status, managerId: u.managerId, notify: u.notify, department: u.department, empCode: u.empCode, leaveAllot: u.leaveAllot, photoVer: u.photoVer };
+      // a deleted person is not in any list, but the old records they appear in still show their NAME
+      if (u.deleted === "Y") return { userId: u.userId, name: u.name, status: "Inactive", deleted: "Y" } as Record<string, unknown>;
+      const known = u.userId === ctx.actorId || u.userId === ctx.actor.managerId || Object.values(reach).some((r) => r.all || r.ids.has(String(u.userId)));
+      const o: Record<string, unknown> = known
+        ? { userId: u.userId, name: u.name, role: u.role, status: u.status, managerId: u.managerId, notify: u.notify, department: u.department, empCode: u.empCode, leaveAllot: u.leaveAllot, photoVer: u.photoVer }
+        : { userId: u.userId, name: u.name, status: u.status, department: u.department, photoVer: u.photoVer };
       if (u.userId === ctx.actorId || (seesContacts && inEmp(u.userId))) { o.mobile = u.mobile; o.email = u.email; }
+      // when somebody left (or leaves): the date and kind to people who know them; the note and who took over only to those who may record exits
+      if (known && u.exitDate) { o.exitDate = u.exitDate; o.exitType = u.exitType; o.exitDone = u.exitDone; if (canExit) { o.exitReason = u.exitReason; o.exitHandover = u.exitHandover; o.exitBy = u.exitBy; } }
       return o;
     }),
     items: items.map((i) => pub("Flow_Items", i)),
@@ -170,7 +184,8 @@ export async function searchEntries(ctx: Ctx, p: Record<string, unknown>) {
   const t = await ctx.db.load(["Flows", "Flow_Items", "Flow_Tasks"]);
   const hits = visibleItems(ctx, await ctx.reach("fms"), t).items.filter((i) => `${i.title} ${i.dataJson} ${i.tags} ${i.itemId}`.toLowerCase().includes(q)).slice(0, 60);
   const ids = new Set(hits.map((i) => i.itemId));
-  return { items: hits.map((i) => pub("Flow_Items", i)), tasks: t.Flow_Tasks.filter((x) => ids.has(x.itemId)).map((x) => pub("Flow_Tasks", x)) };
+  const reach = await ctx.reach("fms");
+  return { items: hits.map((i) => pub("Flow_Items", i)), tasks: t.Flow_Tasks.filter((x) => ids.has(x.itemId) && (reach.all || reach.ids.has(String(x.assigneeId)) || reach.ids.has(String(x.doneBy)))).map((x) => pub("Flow_Tasks", x)) };
 }
 
 /** The activity log: who did what and when. People see the actions of people inside their reach. */
@@ -220,7 +235,7 @@ export async function saveSettings(ctx: Ctx, d: Record<string, unknown>) {
     if (["ATT_FULL_HOURS", "ATT_HALF_HOURS", "ATT_STD_HOURS"].includes(k)) require_(v !== "" && !isNaN(Number(v)) && Number(v) > 0 && Number(v) <= 24, `${k} must be a number of hours (1-24)`);
     if (k === "ATT_GATE") require_(["required", "prompt", "off"].includes(v), "ATT_GATE must be required, prompt or off");
     if (["ATT_GATE_FROM", "ATT_REMIND_CHECKIN", "ATT_REMIND_CHECKOUT"].includes(k)) require_(/^([01]\d|2[0-3]):[0-5]\d$/.test(v), `${k} must be a time like 09:45`);
-    if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "ATT_PHOTO") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
+    if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "ATT_PHOTO" || k === "LEAVE_BLOCK_OVERDRAW") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
     if (k === "TIMEZONE") { try { new Intl.DateTimeFormat("en", { timeZone: v }); } catch { fail("VALIDATION", "Unknown timezone (example: Asia/Kolkata)"); } }
     const row = rows.find((r) => r.key === k);
     if (!row) { ctx.tx.insert("Settings", { key: k, value: v, description: known.get(k)!.desc, group: "General" }); ctx.tx.audit("Setting changed", "Settings", k, { value: known.get(k)!.v }, { value: v }); }

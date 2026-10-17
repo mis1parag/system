@@ -137,7 +137,7 @@ export class Db {
 }
 
 /** which module an audit entry belongs to (for the activity-log filter) */
-const MODULE_OF_ENTITY: Record<string, string> = { Flows: "fms", Flow_Items: "fms", Flow_Tasks: "fms", Requests: "fms", Comments: "fms", Checklist_Tasks: "checklist", Checklist_Log: "checklist", Attendance: "attendance", Leaves: "attendance", Absences: "attendance", Holidays: "attendance", Users: "employees", Employee_Details: "employees", Profile_Photos: "employees", Roles: "employees", Settings: "settings", Vault_Items: "vault", Vault_Access: "vault", Quick_Links: "quick_access", Saved_Filters: "" };
+const MODULE_OF_ENTITY: Record<string, string> = { Flows: "fms", Flow_Items: "fms", Flow_Tasks: "fms", Requests: "fms", Comments: "fms", Checklist_Tasks: "checklist", Checklist_Log: "checklist", Attendance: "attendance", Leaves: "attendance", Absences: "attendance", Holidays: "attendance", Leave_Policy: "attendance", Leave_Adjust: "attendance", Salary_Slips: "payroll", Slip_Requests: "payroll", Reminders: "reminders", Announcements: "settings", Users: "employees", Employee_Details: "employees", Profile_Photos: "employees", Roles: "employees", Settings: "settings", Vault_Items: "vault", Vault_Access: "vault", Quick_Links: "quick_access", Saved_Filters: "" };
 
 interface Work { rows: Rec[]; orig: Map<Rec, string>; inserted: Rec[]; loaded: boolean }
 
@@ -185,7 +185,7 @@ export class Tx {
 
   audit(action: string, entity: string, recordId: string, oldV?: unknown, newV?: unknown) {
     const clip = (v: unknown) => { if (v === undefined || v === null) return ""; const s = JSON.stringify(v); return s.length > 2000 ? s.slice(0, 1997) + "..." : s; };
-    this.audits.push({ timestamp: this.stamp, user: this.actorId, action, entity, recordId, oldValue: clip(oldV), newValue: clip(newV), module: MODULE_OF_ENTITY[entity] ?? (["fms", "checklist", "attendance", "scorecard", "quick_access", "vault", "employees", "reports", "settings", "audit"].includes(entity) ? entity : ""), ip: this.meta.ip ?? "", device: this.meta.device ?? "" });
+    this.audits.push({ timestamp: this.stamp, user: this.actorId, action, entity, recordId, oldValue: clip(oldV), newValue: clip(newV), module: MODULE_OF_ENTITY[entity] ?? (["fms", "checklist", "attendance", "scorecard", "quick_access", "vault", "employees", "reports", "settings", "audit", "payroll", "reminders"].includes(entity) ? entity : ""), ip: this.meta.ip ?? "", device: this.meta.device ?? "" });
   }
 
   /** The row as it is in the sheet right now (bypasses the cache). */

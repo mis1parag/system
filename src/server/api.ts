@@ -17,6 +17,15 @@ import { moveWork } from "./domain/move.ts";
 import { addComment, bulkEntries, cancelEntry, createEntry, deleteComment, importEntries, postponeEntry, updateEntry } from "./domain/entries.ts";
 import { completeTask, decideRequest, reassignTask, reopenTask, requestExtension } from "./domain/tasks.ts";
 import { addHolidays, createAbsence, deleteAbsence, deleteHoliday } from "./domain/people.ts";
+import { publishHolidays, saveHoliday } from "./domain/holidays.ts";
+import { getLeaveYear, saveLeavePolicy, setLeaveAdjust } from "./domain/leave-year.ts";
+import { declineSlipRequest, deleteSlip, getSlip, importSlips, listSlipRequests, listSlips, publishSlips, requestSlip, saveSlip } from "./domain/payroll.ts";
+import { convertNote, deleteNote, listNotes, saveNote, toggleNote } from "./domain/notes.ts";
+import { listReminders, readReminder, sendReminders } from "./domain/reminders.ts";
+import { getLeaderboard } from "./domain/leaderboard.ts";
+import { requestChecklistTime } from "./domain/checklist-time.ts";
+import { deleteUser, recordExit, reinstateUser, setUserStatus } from "./domain/exit.ts";
+import { adminChecks, adminEditRow, adminRows, adminSetDeleted, adminTables, deleteAnnouncement, listAnnouncements, saveAnnouncement } from "./domain/admin-tools.ts";
 import { auditLog, getFlowData, getItemDetail, logExport, markNotificationsRead, saveSettings, searchEntries } from "./domain/read.ts";
 import { cancelLeave, checkIn, checkOut, decideLeave, deleteAttendance, getPunchPhoto, importAttendance, importLeaves, kioskPunch, closeMyPunch, markAttendance, requestLeave } from "./domain/attendance.ts";
 import { bulkAddChecklistTasks, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
@@ -68,7 +77,8 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     reopenTask: { roles: ALL, perm: ["fms", "delete"], fn: reopenTask },
     reassignTask: { roles: ALL, perm: ["fms", "assign"], fn: reassignTask },
     requestExtension: { roles: ALL, perm: ["fms", "edit"], fn: requestExtension },
-    decideRequest: { roles: ALL, perm: ["fms", "view"], fn: decideRequest },
+    decideRequest: { roles: ALL, fn: decideRequest }, // FMS steps need the FMS module (checked inside); checklist requests are decided by the checklist approvers
+    requestChecklistTime: { roles: ALL, perm: ["checklist", "view"], fn: requestChecklistTime },
     moveWork: { roles: ALL, fn: moveWork },
     // checklist
     saveChecklistTask: { roles: ALL, fn: saveChecklistTask },
@@ -95,9 +105,18 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     deleteAbsence: { roles: ALL, perm: ["attendance", "create"], fn: deleteAbsence },
     addHolidays: { roles: ALL, perm: ["attendance", "configure"], fn: addHolidays },
     deleteHoliday: { roles: ALL, perm: ["attendance", "configure"], fn: deleteHoliday },
+    saveHoliday: { roles: ALL, perm: ["attendance", "configure"], fn: saveHoliday },
+    publishHolidays: { roles: ALL, perm: ["attendance", "configure"], fn: publishHolidays },
+    getLeaveYear: { roles: ALL, read: true, perm: ["attendance", "view"], fn: getLeaveYear },
+    saveLeavePolicy: { roles: ALL, perm: ["attendance", "configure"], fn: saveLeavePolicy },
+    setLeaveAdjust: { roles: ALL, perm: ["attendance", "view"], fn: setLeaveAdjust },
     // people
     saveUser: { roles: ALL, perm: ["employees", "view"], fn: saveUser },
     bulkSaveUsers: { roles: ALL, perm: ["employees", "import"], fn: bulkSaveUsers },
+    recordExit: { roles: ALL, perm: ["employees", "delete"], fn: recordExit },
+    setUserStatus: { roles: ALL, perm: ["employees", "delete"], fn: setUserStatus },
+    reinstateUser: { roles: ALL, perm: ["employees", "delete"], fn: reinstateUser },
+    deleteUser: { roles: SUPER, fn: deleteUser },
     updateProfile: { roles: ALL, fn: updateProfile },
     saveProfilePhoto: { roles: ALL, fn: saveProfilePhoto },
     saveEmployee: { roles: ALL, fn: saveEmployee },
@@ -120,6 +139,37 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     saveVault: { roles: ALL, perm: ["vault", "view"], fn: saveVault },
     deleteVault: { roles: ALL, perm: ["vault", "view"], fn: deleteVault },
     assignVault: { roles: ALL, perm: ["vault", "view"], fn: assignVault },
+    // salary slips (each person sees only their own; payroll people prepare and publish)
+    listSlips: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listSlips },
+    getSlip: { roles: ALL, perm: ["payroll", "view"], fn: getSlip },
+    saveSlip: { roles: ALL, perm: ["payroll", "view"], fn: saveSlip },
+    publishSlips: { roles: ALL, perm: ["payroll", "view"], fn: publishSlips },
+    deleteSlip: { roles: ALL, perm: ["payroll", "view"], fn: deleteSlip },
+    importSlips: { roles: ALL, perm: ["payroll", "view"], fn: importSlips },
+    requestSlip: { roles: ALL, perm: ["payroll", "view"], fn: requestSlip },
+    listSlipRequests: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listSlipRequests },
+    declineSlipRequest: { roles: ALL, perm: ["payroll", "view"], fn: declineSlipRequest },
+    // private notepad (always the signed-in person's own)
+    listNotes: { roles: ALL, read: true, fn: listNotes },
+    saveNote: { roles: ALL, fn: saveNote },
+    toggleNote: { roles: ALL, fn: toggleNote },
+    deleteNote: { roles: ALL, fn: deleteNote },
+    convertNote: { roles: ALL, fn: convertNote },
+    // reminders
+    sendReminders: { roles: ALL, perm: ["reminders", "view"], fn: sendReminders },
+    listReminders: { roles: ALL, read: true, fn: listReminders },
+    readReminder: { roles: ALL, fn: readReminder },
+    // Super Admin console and announcements
+    adminTables: { roles: SUPER, read: true, fn: adminTables },
+    adminRows: { roles: SUPER, read: true, fn: adminRows },
+    adminExport: { roles: SUPER, fn: (c, d) => adminRows(c, { ...d, all: true }) }, // not a read: the download is written to the activity log
+    adminChecks: { roles: SUPER, read: true, fn: adminChecks },
+    adminEditRow: { roles: SUPER, fn: adminEditRow },
+    adminSetDeleted: { roles: SUPER, fn: adminSetDeleted },
+    saveAnnouncement: { roles: SUPER, fn: saveAnnouncement },
+    deleteAnnouncement: { roles: SUPER, fn: deleteAnnouncement },
+    listAnnouncements: { roles: ALL, read: true, fn: listAnnouncements },
+    getLeaderboard: { roles: ALL, read: true, fn: getLeaderboard },
     // filters and exports
     saveFilter: { roles: ALL, fn: saveFilter },
     deleteFilter: { roles: ALL, fn: deleteFilter },
@@ -131,7 +181,20 @@ export const WRITE_ACTIONS = new Set(Object.entries(buildActions(true)).filter((
 
 export interface RunOptions { live?: boolean; delivery?: DeliveryConfig; /** tests only: pretend it is this moment */ now?: Date; /** who is calling (IP, browser): written into the activity log */ meta?: { ip?: string; device?: string } }
 
+/** Check-in / check-out of one person run one after the other, so a double click (or two devices) cannot create two punches. */
+const punchLocks = new Map<string, Promise<unknown>>();
+const PUNCH_ACTIONS = new Set(["checkIn", "checkOut", "closeMyPunch", "kioskPunch"]);
+
 export async function runAction(db: Db, actorId: string, action: string, data: Record<string, unknown>, opts: RunOptions = {}): Promise<ApiResult> {
+  if (!PUNCH_ACTIONS.has(action)) return runActionNow(db, actorId, action, data, opts);
+  const key = action === "kioskPunch" ? "kiosk" : actorId;
+  const before = punchLocks.get(key) ?? Promise.resolve();
+  const mine = before.catch(() => undefined).then(() => runActionNow(db, actorId, action, data, opts));
+  punchLocks.set(key, mine);
+  try { return await mine; } finally { if (punchLocks.get(key) === mine) punchLocks.delete(key); }
+}
+
+async function runActionNow(db: Db, actorId: string, action: string, data: Record<string, unknown>, opts: RunOptions = {}): Promise<ApiResult> {
   try {
     const def = buildActions(opts.live ?? true)[action];
     if (!def) return { ok: false, code: "BAD_ACTION", error: `Unknown action "${action}"` };

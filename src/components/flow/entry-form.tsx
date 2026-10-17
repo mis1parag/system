@@ -13,7 +13,7 @@ import { PRIORITIES, type Flow, type FlowItem } from "@/lib/flow-types";
 import { useFlows } from "@/lib/flow-store";
 
 export function EntryForm({ flow, item, onClose, onSaved }: { flow: Flow; item?: FlowItem; onClose: () => void; onSaved?: (id: string) => void }) {
-  const { call, itemsOf, data, meId } = useFlows();
+  const { call, itemsOf, tasksOf, data, meId, allow, peopleFor, userName } = useFlows();
   const existing = item ? itemData(item) : {};
   const [v, setV] = useState<Record<string, string>>(() => Object.fromEntries(flow.fields.map((f) => [f.key, existing[f.key] === undefined ? "" : String(existing[f.key])])));
   const [priority, setPriority] = useState<string>(item?.priority ?? "Normal");
@@ -22,13 +22,28 @@ export function EntryForm({ flow, item, onClose, onSaved }: { flow: Flow; item?:
   const [visibleTo, setVisibleTo] = useState<string[]>((item?.visibleTo ?? "").split(",").filter(Boolean));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const myTasks = item ? tasksOf(item.itemId) : [];
+  // who does which step of THIS entry (only for people who may assign work); empty = the FMS's own rule
+  const [who, setWho] = useState<Record<string, string>>(() => Object.fromEntries(myTasks.map((t) => [t.stepId, t.assigneeId])));
+  const canAssign = allow("fms", "assign");
+  const pickable = peopleFor("fms");
   const suggestions = useSuggestions(flow, itemsOf(flow.flowId));
 
   async function save() {
     setBusy(true); setErr("");
     const r = item
       ? await call<FlowItem>("updateEntry", { itemId: item.itemId, data: v, priority, tags, visibility, visibleTo: visibleTo.join(",") })
-      : await call<FlowItem>("createEntry", { flowId: flow.flowId, data: v, priority, tags, visibility, visibleTo: visibleTo.join(",") });
+      : await call<FlowItem>("createEntry", { flowId: flow.flowId, data: v, priority, tags, visibility, visibleTo: visibleTo.join(","), assignees: canAssign ? Object.fromEntries(Object.entries(who).filter(([, id]) => id)) : {} });
+    if (r.ok && item && canAssign) {
+      // an existing entry: hand over the steps whose person was changed here
+      for (const t of myTasks) {
+        const to = who[t.stepId];
+        if (to && to !== t.assigneeId && t.status === "Pending") {
+          const rr = await call("reassignTask", { taskId: t.taskId, assigneeId: to });
+          if (!rr.ok) { setBusy(false); setErr(rr.error || "Could not change who does a step"); return; }
+        }
+      }
+    }
     setBusy(false);
     if (!r.ok) { setErr(r.error || "Could not save"); return; }
     toast.success(item ? "Entry updated" : "Entry added — all planned times are set");
@@ -46,6 +61,27 @@ export function EntryForm({ flow, item, onClose, onSaved }: { flow: Flow; item?:
               <FieldInput field={f} value={v[f.key] ?? ""} onChange={(x) => setV({ ...v, [f.key]: x })} suggestions={suggestions[f.key]} />
             </Field>
           ))}
+          {canAssign && flow.steps.length > 0 && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="mb-2 text-sm font-medium">Who does each step</div>
+              <div className="grid gap-1.5">
+                {flow.steps.map((s) => {
+                  const t = myTasks.find((x) => x.stepId === s.stepId);
+                  const locked = !!t && t.status !== "Pending";
+                  return (
+                    <label key={s.stepId} className="grid items-center gap-2 text-sm sm:grid-cols-[1fr_11rem]">
+                      <span className="truncate" title={s.name}>{s.name}{locked && <span className="ml-1 text-xs text-muted-foreground">(done by {userName(t!.assigneeId)})</span>}</span>
+                      <NativeSelect value={who[s.stepId] ?? ""} disabled={locked} onChange={(e) => setWho({ ...who, [s.stepId]: e.target.value })} aria-label={`Who does: ${s.name}`}>
+                        {!item && <option value="">{s.assigneeId ? `Usual: ${userName(s.assigneeId)}` : "Usual person"}</option>}
+                        {pickable.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+                      </NativeSelect>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">Only the people you choose see their step of this entry.</p>
+            </div>
+          )}
           <Field label="Priority"><NativeSelect value={priority} onChange={(e) => setPriority(e.target.value)}>{PRIORITIES.map((p) => <option key={p}>{p}</option>)}</NativeSelect></Field>
           <details className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
             <summary className="cursor-pointer font-medium text-muted-foreground">More options</summary>

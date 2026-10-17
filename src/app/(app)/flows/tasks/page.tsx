@@ -77,7 +77,7 @@ export default function MyTasksPage() {
   }, [meId, inReach]);
   const count = (id: string) => rows.filter(quickFns[id]).length;
   const quick: QuickDef[] = [
-    { id: "mine", label: "My tasks", count: count("mine") }, { id: "today", label: "Today", count: count("today") }, { id: "overdue", label: "Overdue", count: count("overdue") },
+    { id: "mine", label: "Mine", count: count("mine") }, { id: "today", label: "Today", count: count("today") }, { id: "overdue", label: "Overdue", count: count("overdue") },
     { id: "upcoming", label: "Upcoming", count: count("upcoming") }, { id: "done", label: "Completed" }, { id: "all", label: "Everyone's" },
   ];
 
@@ -96,7 +96,7 @@ export default function MyTasksPage() {
 
   return (
     <>
-      <PageHeader help={{ id: "tasks", title: "These are the steps waiting for you", text: "Tap a title to see the whole entry. Tap Done when you finish a step — or More time if you need to move it. Red = late, amber = due today. The buttons at the top (My tasks, Today, Overdue…) are one-click filters; use Filters for more." }} title="My tasks" subtitle={`${count("mine")} waiting for you · ${overdueMine} overdue`} />
+      <PageHeader help={{ id: "tasks", title: "These are the steps waiting for you", text: "Tap a title to see the whole entry. Tap Done when you finish a step — or More time if you need to move it. Red = late, amber = due today. The buttons at the top (Mine, Today, Overdue…) are one-click filters; use Filters for more." }} title="FMS tasks" subtitle={`${count("mine")} waiting for you · ${overdueMine} overdue`} />
       {away && (
         <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
           You are marked away until {away.toDate}. Steps in this period are handled by <b>{userName(away.backupUserId)}</b>.

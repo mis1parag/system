@@ -87,6 +87,11 @@ export async function saveUser(ctx: Ctx, rec: Record<string, unknown>) {
   if (empCode) require_(!users.some((x) => x !== existing && String(x.empCode).toLowerCase() === empCode.toLowerCase()), `Employee ID ${empCode} is already used by someone else`);
   const status = str(rec.status) || "Active";
   require_(["Active", "Inactive"].includes(status), "Status must be Active or Inactive");
+  // switching a person on or off (and bringing back someone who left) is for Admins and the Super Admin, not for everyone who may edit a profile
+  if (existing && status !== existing.status) {
+    ctx.require("employees", "delete", "Only an Admin or the Super Admin can switch a person on or off");
+    require_(!(status === "Active" && existing.exitDone === "Y"), "This person has left the company. Use Reinstate on the Team page.");
+  }
   const clash = users.find((x) => x !== existing && ((mobile && digits10(x.mobile) === mobile) || (email && String(x.email).toLowerCase() === email)));
   require_(!clash, `Another user already uses this mobile / email (${clash?.userId})`);
   const pin = str(rec.pin);

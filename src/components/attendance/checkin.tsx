@@ -47,7 +47,7 @@ export function useDayState() {
   const snoozed = mode === "prompt" && !!snoozeUntil && n < snoozeUntil;
   // the Super Admin is never locked out — for them it is always a postponable reminder
   const strict = mode === "required" && !isSuper;
-  const checkoutDue = !!open && hm >= (s.ATT_REMIND_CHECKOUT || "18:30");
+  const checkoutDue = !!open && !kioskOnly && hm >= (s.ATT_REMIND_CHECKOUT || "18:30");
   return {
     ready: !!data, tracked, workingDay, kioskOnly, todays, open, stale, day, strict, mode,
     needsCheckIn: due && !snoozed, needsCheckOut: checkoutDue,
@@ -164,8 +164,13 @@ export function DayChip({ tone = "dark" }: { tone?: "dark" | "light" }) {
   const p = usePunch();
   const st = useDayState();
   const [open, setOpen] = useState(false);
-  const state = useMemo(() => (!st.ready || !st.tracked ? "none" : st.kioskOnly ? "none" : p.state), [st.ready, st.tracked, st.kioskOnly, p.state]);
+  const state = useMemo(() => (!st.ready || !st.tracked ? "none" : st.kioskOnly ? "kiosk" : p.state), [st.ready, st.tracked, st.kioskOnly, p.state]);
   if (state === "none") return null;
+  if (state === "kiosk") return (
+    <Link href="/flows/kiosk" aria-label="Check in at the office kiosk" className={cn("flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors", tone === "dark" ? "bg-sidebar-accent/60 text-sidebar-foreground hover:bg-sidebar-accent" : "bg-muted text-foreground hover:bg-muted/70")}>
+      <ClockIcon className="size-3.5 shrink-0 opacity-70" /><span className="min-w-0 flex-1 truncate">Check in at the office kiosk</span>
+    </Link>
+  );
   const label = state === "in" ? `In ${p.open!.checkIn.slice(11)} · ${fmtHours(p.liveMin / 60)}` : state === "done" ? `Done · ${fmtHours(p.closedMin / 60)}` : st.workingDay ? "Not checked in" : "Day off";
   const bad = state === "out" && st.workingDay;
   return (

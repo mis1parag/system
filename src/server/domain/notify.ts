@@ -18,7 +18,7 @@ export function deliveryFromEnv(env: Record<string, string | undefined> = proces
   };
 }
 
-interface Mailer { sendMail(m: { from?: string; to: string; subject: string; text: string }): Promise<unknown> }
+interface Mailer { sendMail(m: { from?: string; to: string; subject: string; text: string; html?: string; attachments?: { filename: string; content: string; contentType: string }[] }): Promise<unknown> }
 let mailer: { url: string; t: Mailer } | null = null;
 
 const withTimeout = <T>(p: Promise<T>, ms: number, what: string): Promise<T> =>

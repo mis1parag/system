@@ -125,6 +125,8 @@ ok(!(await call(KUNAL, "kioskPunch", { empCode: "PAR773" }, [TUE, "09:00"])).ok,
 const k1 = await call(PRIYA, "kioskPunch", { empCode: "par773", photo: JPG }, [TUE, "09:05"]);
 ok(k1.ok && k1.data.action === "in" && k1.data.name === "Kunal" && k1.data.time === "09:05", `kiosk checks in by employee id (any case): ${k1.error}`);
 ok(k1.data.attendance.source === "kiosk" && k1.data.attendance.userId === KUNAL && k1.data.attendance.inPhoto.startsWith("PHO"), "…saved as Kunal's punch with a photo id");
+const dbl = await call(PRIYA, "kioskPunch", { empCode: "PAR773" }, [TUE, "09:05"]);
+ok(!dbl.ok && /just now/.test(dbl.error) && (await call(PRIYA, "getFlowData", {}, TUE)).data.attendance.filter((r) => r.userId === KUNAL && r.date === TUE).length === 1, "a double scan at the kiosk is ignored with a clear message — still one open check-in, no zero-minute day");
 const ph = await call(KUNAL, "getPunchPhoto", { photoId: k1.data.attendance.inPhoto }, TUE);
 ok(ph.ok && ph.data.image === JPG, "the person can see their own photo");
 ok(!(await call(NIDHI, "getPunchPhoto", { photoId: k1.data.attendance.inPhoto }, TUE)).ok, "…but nobody else except an admin");

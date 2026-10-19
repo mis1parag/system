@@ -235,7 +235,8 @@ export async function saveSettings(ctx: Ctx, d: Record<string, unknown>) {
     if (["ATT_FULL_HOURS", "ATT_HALF_HOURS", "ATT_STD_HOURS"].includes(k)) require_(v !== "" && !isNaN(Number(v)) && Number(v) > 0 && Number(v) <= 24, `${k} must be a number of hours (1-24)`);
     if (k === "ATT_GATE") require_(["required", "prompt", "off"].includes(v), "ATT_GATE must be required, prompt or off");
     if (["ATT_GATE_FROM", "ATT_REMIND_CHECKIN", "ATT_REMIND_CHECKOUT"].includes(k)) require_(/^([01]\d|2[0-3]):[0-5]\d$/.test(v), `${k} must be a time like 09:45`);
-    if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "ATT_PHOTO" || k === "LEAVE_BLOCK_OVERDRAW") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
+    if (k === "PAY_LATE_MARKS") require_(/^\d{1,2}$/.test(v), "PAY_LATE_MARKS must be a whole number (0 = off)");
+    if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "ATT_PHOTO" || k === "LEAVE_BLOCK_OVERDRAW" || k === "PAY_EMAIL_SLIPS" || k === "PAY_EMAIL_ATTACH") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
     if (k === "TIMEZONE") { try { new Intl.DateTimeFormat("en", { timeZone: v }); } catch { fail("VALIDATION", "Unknown timezone (example: Asia/Kolkata)"); } }
     const row = rows.find((r) => r.key === k);
     if (!row) { ctx.tx.insert("Settings", { key: k, value: v, description: known.get(k)!.desc, group: "General" }); ctx.tx.audit("Setting changed", "Settings", k, { value: known.get(k)!.v }, { value: v }); }

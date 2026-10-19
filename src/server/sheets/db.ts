@@ -137,7 +137,7 @@ export class Db {
 }
 
 /** which module an audit entry belongs to (for the activity-log filter) */
-const MODULE_OF_ENTITY: Record<string, string> = { Flows: "fms", Flow_Items: "fms", Flow_Tasks: "fms", Requests: "fms", Comments: "fms", Checklist_Tasks: "checklist", Checklist_Log: "checklist", Attendance: "attendance", Leaves: "attendance", Absences: "attendance", Holidays: "attendance", Leave_Policy: "attendance", Leave_Adjust: "attendance", Salary_Slips: "payroll", Slip_Requests: "payroll", Reminders: "reminders", Announcements: "settings", Users: "employees", Employee_Details: "employees", Profile_Photos: "employees", Roles: "employees", Settings: "settings", Vault_Items: "vault", Vault_Access: "vault", Quick_Links: "quick_access", Saved_Filters: "" };
+const MODULE_OF_ENTITY: Record<string, string> = { Flows: "fms", Flow_Items: "fms", Flow_Tasks: "fms", Requests: "fms", Comments: "fms", Checklist_Tasks: "checklist", Checklist_Log: "checklist", Attendance: "attendance", Leaves: "attendance", Absences: "attendance", Holidays: "attendance", Leave_Policy: "attendance", Leave_Adjust: "attendance", Salary_Slips: "payroll", Slip_Requests: "payroll", Salary_Structure: "payroll", Pay_Waivers: "payroll", Reminders: "reminders", Announcements: "settings", Users: "employees", Employee_Details: "employees", Profile_Photos: "employees", Roles: "employees", Settings: "settings", Vault_Items: "vault", Vault_Access: "vault", Quick_Links: "quick_access", Saved_Filters: "" };
 
 interface Work { rows: Rec[]; orig: Map<Rec, string>; inserted: Rec[]; loaded: boolean }
 

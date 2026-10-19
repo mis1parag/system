@@ -25,7 +25,7 @@ function requirement(path: string): [ModuleId, Action] | "super" | null {
   const p = path.replace(/\/$/, "");
   const exact: Record<string, [ModuleId, Action] | "super"> = {
     "/flows/tasks": ["fms", "view"], "/flows/search": ["fms", "view"], "/flows/new": ["fms", "configure"], "/flows": ["fms", "view"],
-    "/flows/checklist": ["checklist", "view"], "/flows/attendance": ["attendance", "view"], "/flows/team": ["attendance", "view"], "/flows/kiosk": ["attendance", "manage"],
+    "/flows/checklist": ["checklist", "view"], "/flows/attendance": ["attendance", "view"], "/flows/team": ["attendance", "view"], "/flows/kiosk": ["attendance", "view"],
     "/flows/scorecard": ["scorecard", "view"], "/flows/insights": ["reports", "view"], "/flows/vault": ["vault", "view"], "/flows/quick": ["quick_access", "view"],
     "/flows/users": ["employees", "view"], "/flows/holidays": ["attendance", "view"], "/flows/myteam": ["attendance", "view"], "/flows/reminders": ["reminders", "view"], "/flows/audit": ["audit", "view"], "/flows/settings": "super", "/flows/access": "super", "/flows/admin": "super", "/flows/console": "super",
   };
@@ -42,6 +42,8 @@ const GROUPS: NavGroup[] = [
     title: "",
     items: [
       { href: "/flows/panel", label: "Home", short: "Home", hint: "Today at a glance: what is late, what needs a decision", icon: LayoutDashboardIcon },
+      { href: "/flows/kiosk", label: "Attendance kiosk", short: "Kiosk", hint: "Check in / out at the office kiosk (reception runs it; everyone can see their ID and today)", icon: ScanFaceIcon, module: "attendance" },
+      { href: "/flows/leaderboard", label: "Leaderboard", short: "Leaders", hint: "This month: who came on time and finished their work", icon: AwardIcon },
       { href: "/flows/tasks", label: "FMS tasks", short: "FMS tasks", hint: "Steps of your FMS that are waiting for you", icon: ListChecksIcon, module: "fms" },
       { href: "/flows/checklist", label: "Checklist", short: "Checklist", hint: "Daily, weekly, monthly and one-time tasks — tick them off", icon: ClipboardCheckIcon, module: "checklist" },
       { href: "/flows/attendance", label: "Attendance", short: "Attendance", hint: "Check in and out, your month, apply for leave", icon: CalendarCheck2Icon, module: "attendance" },
@@ -58,9 +60,7 @@ const GROUPS: NavGroup[] = [
   },
   {
     title: "Reports",
-    items: [
-      { href: "/flows/leaderboard", label: "Leaderboard", short: "Leaders", hint: "This month: who came on time and finished their work", icon: AwardIcon },
-      { href: "/flows/scorecard", label: "Scorecard", short: "Scorecard", hint: "% work not done and not done on time, per person per week", icon: TrophyIcon, module: "scorecard" },
+    items: [      { href: "/flows/scorecard", label: "Scorecard", short: "Scorecard", hint: "% work not done and not done on time, per person per week", icon: TrophyIcon, module: "scorecard" },
       { href: "/flows/insights", label: "Insights", hint: "Who delivers on time, which FMS runs late", icon: GaugeIcon, module: "reports" },
     ],
   },
@@ -86,9 +86,7 @@ const GROUPS: NavGroup[] = [
       { href: "/flows/admin", label: "Control center", hint: "Everything the Super Admin decides, and what needs attention", icon: SlidersHorizontalIcon, super: true },
       { href: "/flows/console", label: "Super Admin console", short: "Console", hint: "Correct any record by hand, restore deleted rows, data checks, announcements", icon: WrenchIcon, super: true },
       { href: "/flows/access", label: "Access & roles", hint: "Decide what a Manager and a User can do", icon: ShieldCheckIcon, super: true },
-      { href: "/flows/settings", label: "Settings", hint: "Company rules, attendance, reminders, scorecard benchmark", icon: SettingsIcon, super: true },
-      { href: "/flows/kiosk", label: "Attendance kiosk", short: "Kiosk", hint: "Reception screen: staff scan their ID to check in / out with a photo", icon: ScanFaceIcon, module: "attendance", action: "manage" },
-      { href: "/flows/audit", label: "Activity log", hint: "Every change: who did what and when", icon: HistoryIcon, module: "audit" },
+      { href: "/flows/settings", label: "Settings", hint: "Company rules, attendance, reminders, scorecard benchmark", icon: SettingsIcon, super: true },      { href: "/flows/audit", label: "Activity log", hint: "Every change: who did what and when", icon: HistoryIcon, module: "audit" },
     ],
   },
 ];
@@ -159,7 +157,7 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
     </Link>
   );
 
-  const tabs = ["/flows/panel", "/flows/tasks", "/flows/checklist", "/flows/attendance", "/flows/quick"].map((h) => flat.find((n) => n.href === h)).filter((n): n is NavItem => !!n).slice(0, 3);
+  const tabs = ["/flows/panel", "/flows/kiosk", "/flows/leaderboard", "/flows/tasks", "/flows/checklist", "/flows/attendance", "/flows/quick"].map((h) => flat.find((n) => n.href === h)).filter((n): n is NavItem => !!n).slice(0, 3);
   const need = requirement(pathname);
   const denied = !!data && need !== null && (need === "super" ? role !== "SUPER_ADMIN" : !data.perms?.[need[0]]?.a.includes(need[1]));
   // a page the person was just given access to (a shared login, a new role): look again once before saying "no access"

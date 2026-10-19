@@ -6,6 +6,7 @@
 import { allows, reachOf, scopeOfGrant } from "../../lib/permissions.ts";
 import { fail, forbid, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
+import { cancelSlipMails, queueSlipMail } from "./mail-log.ts";
 
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
 const alive = (rows: Rec[]) => rows.filter((r) => r.deleted !== "Y");
@@ -14,7 +15,7 @@ export const isPeriod = (p: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(p) && Numb
 const DENIED = "You cannot open this salary slip";
 
 type Line = { label: string; amount: number };
-function lines(v: unknown, what: string): Line[] {
+export function lines(v: unknown, what: string): Line[] {
   const list = Array.isArray(v) ? v : [];
   require_(list.length <= 25, `Too many ${what} lines (25 at most)`);
   const out: Line[] = [];
@@ -32,18 +33,23 @@ const parseLines = (json: unknown): Line[] => { try { const v = JSON.parse(Strin
 
 /** The whole slip as the person it belongs to (or payroll) sees it. */
 function view(s: Rec) {
-  return { ...pub("Salary_Slips", s), earnings: parseLines(s.earningsJson), deductions: parseLines(s.deductionsJson) };
+  let att: unknown = null; try { att = s.attJson ? JSON.parse(String(s.attJson)) : null; } catch { /* old slip without a summary */ }
+  return { ...pub("Salary_Slips", s), earnings: parseLines(s.earningsJson), deductions: parseLines(s.deductionsJson), att };
+}
+/** What an employee sees of their OWN slip in a list: that it exists — never the salary. The figures are only in the downloaded slip. */
+function redacted(s: Rec) {
+  return { slipId: s.slipId, userId: s.userId, period: s.period, status: s.status, publishedAt: s.publishedAt, viewedAt: s.viewedAt, daysPaid: null, gross: 0, totalDeductions: 0, net: 0, earnings: [], deductions: [], note: "", att: null, hidden: true };
 }
 
 /** Are you payroll for this person? Needs a payroll right beyond "view own", and the person inside your payroll reach. */
-async function runsPayrollFor(ctx: Ctx, userId: string): Promise<boolean> {
+export async function runsPayrollFor(ctx: Ctx, userId: string): Promise<boolean> {
   if (ctx.isSuper) return true;
   if (userId === ctx.actorId) return false;
   if (!["create", "edit", "approve", "manage", "import", "view"].some((a) => ctx.allow("payroll", a as never))) return false;
   const r = await ctx.reach("payroll");
   return r.all || r.ids.has(userId);
 }
-const preparesFor = async (ctx: Ctx, userId: string) => (await runsPayrollFor(ctx, userId)) && (ctx.isSuper || ["create", "edit", "approve", "manage", "import"].some((a) => ctx.allow("payroll", a as never)));
+export const preparesFor = async (ctx: Ctx, userId: string) => (await runsPayrollFor(ctx, userId)) && (ctx.isSuper || ["create", "edit", "approve", "manage", "import"].some((a) => ctx.allow("payroll", a as never)));
 
 /** Slips you may see: your own published ones, and — if you run payroll — those of the people in your payroll reach (drafts only when you may prepare them). */
 export async function listSlips(ctx: Ctx, d: Record<string, unknown>) {
@@ -61,7 +67,7 @@ export async function listSlips(ctx: Ctx, d: Record<string, unknown>) {
     if (s.status !== "Published" && !ctx.isSuper && (mine || !prepare)) return false;
     return (!period || s.period === period) && (!year || String(s.period).slice(0, 4) === year);
   }).sort((a, b) => String(b.period).localeCompare(String(a.period)) || String(a.userId).localeCompare(String(b.userId)));
-  return { slips: rows.slice(0, 600).map(view), canPrepare: prepare, wide: wide || !!wanted };
+  return { slips: rows.slice(0, 600).map((s) => (s.userId === ctx.actorId && !ctx.isSuper ? redacted(s) : view(s))), canPrepare: prepare, wide: wide || !!wanted };
 }
 
 /** Open one slip. The first time the employee opens it is remembered (and the opening of anyone else's slip is written to the activity log). */
@@ -73,6 +79,11 @@ export async function getSlip(ctx: Ctx, d: Record<string, unknown>) {
   else forbid(await runsPayrollFor(ctx, String(s.userId)), DENIED);
   if (mine && !s.viewedAt && s.status === "Published") s.viewedAt = ctx.clock.stamp;
   if (!mine) ctx.tx.audit("Salary slip opened", "Salary_Slips", String(s.slipId), null, { employee: s.userId, period: s.period });
+  return slipDoc(ctx, s);
+}
+
+/** The slip with the employee's details and the company name — what the printed / e-mailed document is made from. */
+export async function slipDoc(ctx: Ctx, s: Rec) {
   const user = await ctx.user(String(s.userId));
   const det = (await ctx.tx.rows("Employee_Details")).find((x) => x.userId === s.userId);
   return { slip: view(s), employee: { userId: s.userId, name: user?.name ?? "", empCode: user?.empCode ?? "", department: user?.department ?? "", designation: det?.designation ?? "", joinDate: det?.joinDate ?? "" }, company: ctx.setting("COMPANY_NAME", "MIDAP") };
@@ -127,8 +138,8 @@ export async function publishSlips(ctx: Ctx, d: Record<string, unknown>) {
     if (s.status === to) continue;
     s.status = to; changed++;
     if (publish) { for (const q of await ctx.tx.rows("Slip_Requests")) if (q.userId === s.userId && q.period === s.period && q.status === "Pending") { q.status = "Done"; q.handledBy = ctx.actorId; q.handledAt = ctx.clock.stamp; q.reply = "Published"; } }
-    if (publish) { s.publishedBy = ctx.actorId; s.publishedAt = ctx.clock.stamp; ctx.notice({ userId: String(s.userId), type: "payroll", title: `Your salary slip for ${s.period} is ready`, body: "Open Salary slips to view or print it.", link: "/flows/attendance?tab=salary" }); }
-    else { s.publishedBy = ""; s.publishedAt = ""; s.viewedAt = ""; }
+    if (publish) { s.publishedBy = ctx.actorId; s.publishedAt = ctx.clock.stamp; { const m = await queueSlipMail(ctx, s); if (m) ctx.mailIds.push(String(m.mailId)); } ctx.notice({ userId: String(s.userId), type: "payroll", title: `Your salary slip for ${s.period} is ready`, body: "Open Salary slips to view or print it.", link: "/flows/attendance?tab=salary" }); }
+    else { s.publishedBy = ""; s.publishedAt = ""; s.viewedAt = ""; await cancelSlipMails(ctx, String(s.slipId)); }
   }
   ctx.tx.audit(publish ? "Salary slips published" : "Salary slips unpublished", "Salary_Slips", "", null, { requested: ids.size, changed });
   return { changed };

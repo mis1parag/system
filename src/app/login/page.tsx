@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Field, Spinner } from "@/components/common";
+import { GOOGLE_ERRORS } from "@/lib/login-messages";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,11 +14,15 @@ export default function LoginPage() {
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [sheet, setSheet] = useState<{ ok: boolean; hasUsers?: boolean; error?: string } | null>(null);
+  const [next] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("next") ?? ""));
+  const [sheet, setSheet] = useState<{ ok: boolean; hasUsers?: boolean; error?: string; google?: boolean } | null>(null);
 
   // tells a brand-new install to run setup, and shows a clear message when the Google Sheet cannot be reached
   useEffect(() => {
     fetch("/api/setup", { cache: "no-store" }).then((r) => r.json()).then(setSheet).catch(() => setSheet(null));
+    // a failed Google sign-in comes back here with a short code (only messages from a fixed list are ever shown)
+    const g = new URLSearchParams(window.location.search).get("google");
+    if (g && GOOGLE_ERRORS[g]) queueMicrotask(() => setError(GOOGLE_ERRORS[g]));
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -27,7 +33,10 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, pin }) });
       const json = await res.json();
       if (!json.ok) { setError(json.error || "Login failed"); setBusy(false); return; }
-      router.replace("/flows/panel");
+      // a private link (for example the one in a salary-slip e-mail) brings you back to it after signing in — same-site paths only
+      const next = new URLSearchParams(window.location.search).get("next") ?? "";
+      if (/^\/(?!\/)[\w\-./?=&%]*$/.test(next) && !next.startsWith("/login")) window.location.assign(next);
+      else router.replace("/flows/panel");
     } catch {
       setError("Network error — check your connection");
       setBusy(false);
@@ -55,6 +64,15 @@ export default function LoginPage() {
           <Button type="submit" size="lg" className="h-11 text-base" disabled={busy}>
             {busy ? <Spinner /> : "Sign in"}
           </Button>
+          {sheet?.google && (
+            <>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" /></div>
+              <a href={`/api/auth/google${next ? `?next=${encodeURIComponent(next)}` : ""}`} className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 text-base")}>
+                <svg viewBox="0 0 24 24" className="mr-2 size-4" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z" /><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z" /><path fill="#FBBC05" d="M5.4 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.4a12 12 0 0 0 0 10.8l4-3.1z" /><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8z" /></svg>
+                Sign in with Google
+              </a>
+            </>
+          )}
         </div>
       </form>
     </main>

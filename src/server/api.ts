@@ -19,6 +19,7 @@ import { completeTask, decideRequest, reassignTask, reopenTask, requestExtension
 import { addHolidays, createAbsence, deleteAbsence, deleteHoliday } from "./domain/people.ts";
 import { publishHolidays, saveHoliday } from "./domain/holidays.ts";
 import { getLeaveYear, saveLeavePolicy, setLeaveAdjust } from "./domain/leave-year.ts";
+import { generatePaySlips, listStructures, payrollPreview, saveStructure, setPayWaiver } from "./domain/payroll-att.ts";
 import { declineSlipRequest, deleteSlip, getSlip, importSlips, listSlipRequests, listSlips, publishSlips, requestSlip, saveSlip } from "./domain/payroll.ts";
 import { convertNote, deleteNote, listNotes, saveNote, toggleNote } from "./domain/notes.ts";
 import { listReminders, readReminder, sendReminders } from "./domain/reminders.ts";
@@ -30,6 +31,7 @@ import { auditLog, getFlowData, getItemDetail, logExport, markNotificationsRead,
 import { cancelLeave, checkIn, checkOut, decideLeave, deleteAttendance, getPunchPhoto, importAttendance, importLeaves, kioskPunch, closeMyPunch, markAttendance, requestLeave } from "./domain/attendance.ts";
 import { bulkAddChecklistTasks, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
 import { deliver, deliveryFromEnv, type DeliveryConfig } from "./domain/notify.ts";
+import { listMailLog, processMailQueue, resendSlipMail, retryMails } from "./domain/mail-log.ts";
 
 export interface ApiResult<T = unknown> {
   ok: boolean; data?: T; changes?: CommitResult["changes"]; removed?: CommitResult["removed"]; warnings?: string[];
@@ -141,12 +143,20 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     assignVault: { roles: ALL, perm: ["vault", "view"], fn: assignVault },
     // salary slips (each person sees only their own; payroll people prepare and publish)
     listSlips: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listSlips },
+    listMailLog: { roles: ALL, read: true, fn: listMailLog },
+    retryMails: { roles: ALL, perm: ["payroll", "approve"], fn: retryMails },
+    resendSlipMail: { roles: ALL, perm: ["payroll", "approve"], fn: resendSlipMail },
     getSlip: { roles: ALL, perm: ["payroll", "view"], fn: getSlip },
     saveSlip: { roles: ALL, perm: ["payroll", "view"], fn: saveSlip },
     publishSlips: { roles: ALL, perm: ["payroll", "view"], fn: publishSlips },
     deleteSlip: { roles: ALL, perm: ["payroll", "view"], fn: deleteSlip },
     importSlips: { roles: ALL, perm: ["payroll", "view"], fn: importSlips },
     requestSlip: { roles: ALL, perm: ["payroll", "view"], fn: requestSlip },
+    saveStructure: { roles: ALL, perm: ["payroll", "view"], fn: saveStructure },
+    listStructures: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listStructures },
+    payrollPreview: { roles: ALL, read: true, perm: ["payroll", "view"], fn: payrollPreview },
+    setPayWaiver: { roles: ALL, perm: ["payroll", "view"], fn: setPayWaiver },
+    generatePaySlips: { roles: ALL, perm: ["payroll", "view"], fn: generatePaySlips },
     listSlipRequests: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listSlipRequests },
     declineSlipRequest: { roles: ALL, perm: ["payroll", "view"], fn: declineSlipRequest },
     // private notepad (always the signed-in person's own)
@@ -206,7 +216,7 @@ async function runActionNow(db: Db, actorId: string, action: string, data: Recor
     const result = await def.fn(ctx, data ?? {});
     if (def.read) return { ok: true, data: result };
     const { changes, removed } = await ctx.tx.commit();
-    if (ctx.outbox.length) await sendOutbox(ctx, opts.delivery ?? deliveryFromEnv());
+    if (ctx.outbox.length || ctx.mailIds.length) await sendOutbox(ctx, opts.delivery ?? deliveryFromEnv(), opts.now);
     return { ok: true, data: result, changes, removed, warnings: ctx.warnings };
   } catch (e) {
     if (e instanceof MidapError) return { ok: false, code: e.code, error: e.message, extra: e.extra };
@@ -214,8 +224,14 @@ async function runActionNow(db: Db, actorId: string, action: string, data: Recor
   }
 }
 
-export async function sendOutbox(ctx: Ctx, cfg: DeliveryConfig) {
+export async function sendOutbox(ctx: Ctx, cfg: DeliveryConfig, now?: Date) {
   const { Users } = await ctx.db.load(["Users"]);
   const r = await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "MIDAP"));
   if (r.errors.length) ctx.warnings.push(...r.errors.slice(0, 3).map((e) => `Could not send: ${e}`));
+  if (ctx.mailIds.length) {
+    const m = await processMailQueue(ctx.db, cfg, { ids: ctx.mailIds, now });
+    if (m.notes.length) ctx.warnings.push(...m.notes.slice(0, 3));
+    if (m.sent) ctx.warnings.push(`${m.sent} salary slip${m.sent === 1 ? "" : "s"} e-mailed.`);
+    if (m.failed) ctx.warnings.push(`${m.failed} e-mail${m.failed === 1 ? "" : "s"} could not be sent — see the e-mail log; it will be tried again.`);
+  }
 }

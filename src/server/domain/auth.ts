@@ -50,6 +50,31 @@ export async function login(db: Db, identifier: string, pin: string, meta: { ip?
   return { userId: String(u.userId), name: String(u.name), role: String(u.role) };
 }
 
+/**
+ * Sign in with a Google account whose e-mail Google has verified (checked by the caller). Opens an EXISTING Active employee with that e-mail — never creates one,
+ * never matches by name or mobile. Role and access are whatever the employee already has. Every success and refusal is written to the activity log.
+ */
+export async function loginWithGoogle(db: Db, email: string, meta: { ip?: string; device?: string } = {}): Promise<LoginUser> {
+  const mail = str(email).toLowerCase();
+  require_(/^\S+@\S+\.\S+$/.test(mail), "No e-mail address");
+  const settings = await loadSettings(db);
+  const tx = db.begin("login");
+  tx.stamp = clockNow(settings.TIMEZONE).stamp;
+  tx.meta = meta;
+  const matches = (await tx.rows("Users")).filter((u) => u.deleted !== "Y" && String(u.email ?? "").trim().toLowerCase() === mail);
+  const active = matches.filter((u) => u.status === "Active");
+  if (active.length !== 1) {
+    tx.audit("Google login refused", "Users", mail, null, { reason: matches.length === 0 ? "no employee with this e-mail" : active.length === 0 ? "employee is not active" : "e-mail is used by more than one employee" });
+    await tx.commit();
+    fail("AUTH", "no_match");
+  }
+  const u = active[0];
+  if (Number(u.failCount) || u.lockedUntil) { u.failCount = 0; u.lockedUntil = ""; }
+  tx.audit("Login (Google)", "Users", String(u.userId));
+  await tx.commit();
+  return { userId: String(u.userId), name: String(u.name), role: String(u.role) };
+}
+
 /** Writes one line to the activity log for something that is not an action (a sign-out). */
 export async function recordEvent(db: Db, userId: string, action: string, meta: { ip?: string; device?: string } = {}) {
   const settings = await loadSettings(db);

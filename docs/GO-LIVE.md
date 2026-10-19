@@ -42,7 +42,8 @@ Sheet par pehle se log hon to tool ruk jaata hai (galti se overwrite nahi karta)
 ## Part D — Live hone ke baad
 
 * **Reminders/scheduler:** Vercel free plan din mein ek baar chalata hai (`vercel.json`). Har 10 minute ke liye cron-job.org par free job lagao: `https://<address>/api/cron/tick?key=<CRON_SECRET>`. Jab bhi koi app khola hota hai tab bhi ~10 min mein khud chal jaata hai.
-* **Email alerts (optional):** `SMTP_URL` + `MAIL_FROM` bharo (Gmail ke liye App Password).
+* **Email alerts + salary slip e-mail (optional):** `SMTP_URL` + `MAIL_FROM` bharo (Gmail ke liye App Password). Salary slip mails ka log **Attendance → Salary slips → E-mails** mein dikhta hai (Pending / Sent / Failed, Retry button). SMTP set na ho to mails Pending rehti hain aur SMTP lagte hi chali jaati hain.
+* **Google se sign-in (optional):** Google Cloud Console → Credentials → *OAuth client ID* (Web application) banao, Authorised redirect URI = `<APP_URL>/api/auth/google/callback`. Phir Vercel mein `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` aur `APP_URL` (https) daalo. Sirf wahi log aa sakte hain jinka **verified Google email** unke profile ke email se match kare (naya user kabhi nahi banta).
 * **Backup:** Google Sheet ka *File → Version history* khud history rakhta hai; mahine mein ek baar *File → Download → .xlsx* bhi le lo.
 * **VAULT_KEY kabhi mat badlo** aur kahin safe copy rakho — kho gayi to saved passwords wapas nahi khulenge.
 * **PIN badalna:** har insaan *My profile* mein khud badal sakta hai.

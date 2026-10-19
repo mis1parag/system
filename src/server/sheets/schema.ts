@@ -159,8 +159,18 @@ export const TABLES: Record<string, TableDef> = {
     cols: [
       ["slipId", "Slip ID", "s"], ["userId", "Employee", "s"], ["period", "Month (YYYY-MM)", "s"], ["daysPaid", "Days paid", "nn"], ["earningsJson", "Earnings (JSON)", "s"], ["deductionsJson", "Deductions (JSON)", "s"],
       ["gross", "Gross", "n"], ["totalDeductions", "Total deductions", "n"], ["net", "Net pay", "n"], ["note", "Note", "s"], ["status", "Status (Draft / Published)", "s"],
-      ["createdBy", "Created By", "s"], ["createdAt", "Created", "s"], ["publishedBy", "Published By", "s"], ["publishedAt", "Published", "s"], ["viewedAt", "Employee first opened", "s"], ["deleted", "Deleted", "s"],
+      ["createdBy", "Created By", "s"], ["createdAt", "Created", "s"], ["publishedBy", "Published By", "s"], ["publishedAt", "Published", "s"], ["viewedAt", "Employee first opened", "s"], ["deleted", "Deleted", "s"], ["attJson", "Attendance summary (JSON)", "s"], ["emailedAt", "E-mailed to the employee", "s"],
     ],
+  },
+  /** The monthly pay of one person (what payroll prepares slips from). Only payroll people can read it; the person themselves only gets the finished slip. */
+  Salary_Structure: {
+    name: "Salary_Structure", idKey: "userId", prefix: "SST",
+    cols: [["userId", "Employee", "s"], ["earningsJson", "Monthly earnings (JSON)", "s"], ["deductionsJson", "Fixed monthly deductions (JSON)", "s"], ["note", "Note", "s"], ["updatedBy", "Updated By", "s"], ["updatedAt", "Updated", "s"]],
+  },
+  /** A day of absence / half day / late arrival that payroll chose NOT to deduct for ("waived off"). */
+  Pay_Waivers: {
+    name: "Pay_Waivers", idKey: "waiverId", prefix: "PWV", softDelete: true,
+    cols: [["waiverId", "ID", "s"], ["userId", "Employee", "s"], ["period", "Month (YYYY-MM)", "s"], ["date", "Day", "s"], ["kind", "absent / late", "s"], ["reason", "Reason", "s"], ["by", "Waived by", "s"], ["at", "At", "s"], ["deleted", "Deleted", "s"]],
   },
   /** A person asks payroll for a salary slip (a month that is missing). */
   Slip_Requests: {
@@ -185,6 +195,15 @@ export const TABLES: Record<string, TableDef> = {
   Announcements: {
     name: "Announcements", idKey: "annId", prefix: "ANN", softDelete: true,
     cols: [["annId", "ID", "s"], ["title", "Title", "s"], ["body", "Message", "s"], ["audience", "Audience (all / dept:Name / users:id,id)", "s"], ["tone", "Tone (info / important)", "s"], ["startDate", "Show from", "s"], ["endDate", "Show until", "s"], ["createdBy", "By", "s"], ["createdAt", "Created", "s"], ["deleted", "Deleted", "s"]],
+  },
+  /** Every e-mail the app must deliver (salary slips). No salary figure is stored here — the document is built from the slip when it is sent. dedupeKey stops the same slip being mailed twice. */
+  Mail_Log: {
+    name: "Mail_Log", idKey: "mailId", prefix: "MAL",
+    cols: [
+      ["mailId", "ID", "s"], ["kind", "Kind", "s"], ["refId", "Slip / record", "s"], ["dedupeKey", "Dedupe key (one mail per slip version)", "s"], ["userId", "Employee", "s"], ["toEmail", "Sent to", "s"], ["subject", "Subject", "s"],
+      ["status", "Status (Pending / Sending / Sent / Failed / Cancelled)", "s"], ["attempts", "Attempts", "n"], ["lastError", "Last error", "s"], ["nextTry", "Next try", "s"], ["claimedAt", "Being sent since", "s"],
+      ["createdAt", "Queued", "s"], ["sentAt", "Sent", "s"], ["createdBy", "Queued by", "s"],
+    ],
   },
   Settings: {
     name: "Settings", idKey: "key", prefix: "SET",
@@ -221,7 +240,7 @@ export const TABLES: Record<string, TableDef> = {
   },
 };
 
-export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Slip_Requests", "Notes", "Reminders", "Announcements", "Settings", "Audit_Log"];
+export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Salary_Structure", "Pay_Waivers", "Slip_Requests", "Notes", "Reminders", "Announcements", "Mail_Log", "Settings", "Audit_Log"];
 
 /** [key, default, description] */
 export const DEFAULT_SETTINGS: [string, string, string][] = [
@@ -240,6 +259,9 @@ export const DEFAULT_SETTINGS: [string, string, string][] = [
   ["ATT_FULL_HOURS", "6", "Attendance: this many hours worked = a full day"],
   ["ATT_HALF_HOURS", "4", "Attendance: this many hours worked = a half day (less = absent)"],
   ["ATT_STD_HOURS", "9", "Attendance: normal working hours per day (for the employment-hours %)"],
+  ["PAY_LATE_MARKS", "0", "Salary: every this many late arrivals (not waived) cost half a day of pay. 0 = late arrivals never cost pay"],
+  ["PAY_EMAIL_SLIPS", "Y", "Salary: Y = a salary slip is e-mailed to the employee when it is published (needs SMTP_URL and the person's email)"],
+  ["PAY_EMAIL_ATTACH", "Y", "Salary: Y = the e-mail also carries the slip as an attachment, N = only a private link (opens after sign-in as the employee)"],
   ["ATT_SELF_PUNCH", "Y", "Attendance: Y = people can check in / out from their own phone or PC, N = only at the office kiosk"],
   ["ATT_GATE", "required", "Attendance: what happens when someone opens the app without having checked in on a working day — required = a check-in screen they must complete, prompt = the same screen but they can postpone it, off = nothing"],
   ["ATT_GATE_FROM", "08:00", "Attendance: the check-in screen appears from this time of the day"],

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CalendarPlusIcon, CameraIcon, CameraOffIcon, CheckCircle2Icon, ClockIcon, LogInIcon, LogOutIcon, MapPinIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { CameraView, useCamera } from "@/components/attendance/camera";
 import { LeaveDialog } from "@/components/attendance/attendance-dialogs";
 import { usePunch } from "@/components/attendance/punch-card";
@@ -57,7 +58,7 @@ export function MarkTab() {
             </div>
 
             {p.kioskOnly ? (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Check-in and check-out are done at the office kiosk. Ask reception. Everything else on this page still works.</p>
+              <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Check-in and check-out are done at the office kiosk (show or type your Employee ID there). Everything else on this page still works.</p><Link href="/flows/kiosk" className={cn(buttonVariants({ size: "lg" }), "h-11 w-fit text-base")}><LogInIcon /> Check in at the office kiosk</Link></div>
             ) : (
               <>
                 <div>

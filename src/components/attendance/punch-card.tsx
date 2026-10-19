@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { LogInIcon, LogOutIcon, MapPinIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CameraView, getPosition, useCamera } from "@/components/attendance/camera";
 import { Spinner } from "@/components/common";
@@ -74,7 +74,7 @@ export function PunchCard({ compact }: { compact?: boolean }) {
           {(open?.lat ?? mine[0]?.lat) != null && <span className="ml-1.5 inline-flex items-center gap-0.5"><MapPinIcon className="size-3" /> location saved</span>}
         </div>
       </div>
-      {p.kioskOnly ? <span className="text-xs text-muted-foreground">Check in at the office kiosk</span> : (
+      {p.kioskOnly ? <Link href="/flows/kiosk" className={cn(buttonVariants({ size: "lg" }), "h-11 text-base")}><LogInIcon /> Check in at the office kiosk</Link> : (
         <Button onClick={() => (p.photoByDefault ? setSnapOpen(true) : p.punch())} disabled={p.busy} size="lg" variant={state === "in" ? "outline" : "default"} className={cn("h-11 min-w-32 text-base", state === "in" && "border-red-200 text-red-700 hover:bg-red-50")}>
           {p.busy ? <Spinner /> : state === "in" ? <><LogOutIcon /> Check out</> : <><LogInIcon /> {state === "done" ? "Check in again" : "Check in"}</>}
         </Button>

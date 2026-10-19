@@ -8,13 +8,15 @@ import { Input } from "@/components/ui/input";
 import { CameraView, useCamera } from "@/components/attendance/camera";
 import { PageHeader, Section, Spinner } from "@/components/common";
 import { useFlows, useRequireCap } from "@/lib/flow-store";
+import { useAttendance } from "@/components/attendance/use-attendance";
+import { fmtHours } from "@/lib/attendance";
 import { cn } from "@/lib/utils";
 
 interface Done { action: "in" | "out"; name: string; empCode: string; time: string }
 type Banner = { kind: "in" | "out" | "err"; title: string; sub: string };
 
 /** Reception kiosk: an admin keeps this open on the office PC. Staff type or scan their Employee ID; the same tap checks them in, or out when they are already in. A small photo is kept with each punch. */
-export default function KioskPage() {
+function OfficeKiosk() {
   const ok = useRequireCap("useKiosk");
   const { call } = useFlows();
   const { videoRef, state, snap } = useCamera();
@@ -108,4 +110,44 @@ export default function KioskPage() {
       </div>
     </>
   );
+}
+
+/** What a person without the kiosk right sees: where to check in, their ID to show there, and how today stands. */
+function MyKiosk() {
+  const { data, meId, today, userById } = useFlows();
+  const att = useAttendance();
+  const me = userById(meId);
+  const day = att.days(meId, today, today)[0];
+  const punches = (data?.attendance ?? []).filter((r) => r.userId === meId && r.date === today).sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+  const open = punches.find((r) => !r.checkOut);
+  return (
+    <>
+      <PageHeader title="Attendance kiosk" subtitle="Check in and check out at the office kiosk (reception)." />
+      <div className="mx-auto grid max-w-xl gap-4">
+        <div className="rounded-xl border bg-card p-6 text-center shadow-[0_1px_1px_rgba(60,66,87,0.04),0_2px_5px_rgba(60,66,87,0.05)]">
+          <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-[#efeeff] text-primary"><QrCodeIcon className="size-6" /></span>
+          <h2 className="text-lg font-semibold">Check in at the office kiosk</h2>
+          <p className="mt-1 text-sm text-muted-foreground">When you reach the office, show or type your Employee ID on the kiosk at reception. The same tap checks you in — and out when you leave.</p>
+          <div className="mx-auto mt-4 w-fit rounded-lg border bg-muted/40 px-6 py-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Your Employee ID</div>
+            <div className="text-2xl font-bold tabular-nums tracking-wider">{me?.empCode || "—"}</div>
+          </div>
+          {!me?.empCode && <p className="mt-2 text-xs text-amber-700">You have no Employee ID yet. Ask the Super Admin to add it.</p>}
+        </div>
+        <div className="rounded-xl border bg-card p-4 text-sm">
+          <div className="mb-1 font-semibold">Today</div>
+          {punches.length === 0 ? <p className="text-muted-foreground">{day && (day.status === "off" || day.status === "holiday") ? "Today is not a working day." : day?.status === "leave" ? "You are on leave today." : "You have not checked in yet."}</p> : (
+            <ul className="grid gap-1">{punches.map((r) => <li key={r.attId} className="flex justify-between"><span>{r.checkIn.slice(11)} → {r.checkOut ? r.checkOut.slice(11) : "still in"}</span><span className="text-xs text-muted-foreground">{r.source === "kiosk" ? "at the kiosk" : r.source}</span></li>)}</ul>
+          )}
+          {open && <p className="mt-2 text-xs text-muted-foreground">You are checked in. Check out at the kiosk when you leave.</p>}
+          {day && day.hours > 0 && <p className="mt-2 text-xs text-muted-foreground">Worked so far: {fmtHours(day.hours)}</p>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function KioskPage() {
+  const { allow, isSuper } = useFlows();
+  return isSuper || allow("attendance", "manage") ? <OfficeKiosk /> : <MyKiosk />;
 }

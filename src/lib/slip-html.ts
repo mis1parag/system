@@ -4,7 +4,7 @@ import { amountInWords, rupees } from "./money.ts";
 
 export interface SlipLine { label: string; amount: number }
 export interface SlipDoc {
-  slip: { slipId: string; period: string; daysPaid: number | null; earnings: SlipLine[]; deductions: SlipLine[]; gross: number; totalDeductions: number; net: number; note: string; status: string; publishedAt: string };
+  slip: { slipId: string; period: string; daysPaid: number | null; earnings: SlipLine[]; deductions: SlipLine[]; gross: number; totalDeductions: number; net: number; note: string; status: string; publishedAt: string; att?: { daysInMonth: number; present: number; half: number; leave: number; off: number; lop: number; late: number; lateDeducted: number; waived: number; provisional?: boolean } | null };
   employee: { name: string; empCode: string; department: string; designation?: string; joinDate?: string };
   company: string;
 }
@@ -19,6 +19,8 @@ export function slipHtml(o: SlipDoc): string {
   }).join("");
   const info = (k: string, v: string) => `<div class="kv"><span>${k}</span><b>${v ? esc(v) : "—"}</b></div>`;
   const draft = s.status !== "Published";
+  const a = s.att;
+  const att = a ? `<div class="att"><b>Attendance</b><span>Days in month <i>${a.daysInMonth}</i></span><span>Paid days <i>${s.daysPaid ?? a.daysInMonth}</i></span><span>Present <i>${a.present}${a.half ? ` + ${a.half} half` : ""}</i></span><span>Leave <i>${a.leave}</i></span><span>Weekly off / holidays <i>${a.off}</i></span><span>Loss of pay <i>${a.lop}</i></span>${a.waived ? `<span>Waived off <i>${a.waived}</i></span>` : ""}${a.provisional ? "<span class=\"prov\">Month not finished — days still to come counted as paid</span>" : ""}</div>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Salary slip ${esc(s.period)} - ${esc(e.name)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>
   @page{size:A4;margin:12mm}
   *{box-sizing:border-box}
@@ -36,6 +38,7 @@ export function slipHtml(o: SlipDoc): string {
   tbody td{padding:8px 10px;border-bottom:1px solid #eef0f4}.n{text-align:right;font-variant-numeric:tabular-nums}.gap{width:14px;border-bottom:none!important}
   tbody tr:nth-child(even) td:not(.gap){background:#fafbfd}
   tfoot td{padding:10px;font-weight:700;border-top:2px solid #1a1f36}
+  .att{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px 16px;padding:9px 14px;border:1px solid #e3e8ee;border-radius:8px;font-size:12px;color:#3c4257}.att b{color:#1a1f36}.att i{font-style:normal;font-weight:600;color:#1a1f36}.att .prov{color:#983705}
   .net{margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:16px;background:#efeeff;border:1px solid #d6d9ff;border-radius:10px;padding:14px 18px}
   .net .lab{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#4b3fd6}.net .amt{font-size:26px;font-weight:700;color:#1a1f36;font-variant-numeric:tabular-nums}
   .words{margin-top:8px;font-size:12px;color:#3c4257}.words b{color:#1a1f36}
@@ -49,6 +52,7 @@ export function slipHtml(o: SlipDoc): string {
   <div class="band"><div><h1>${esc(o.company)}</h1><div class="sub">Salary slip</div></div><div class="per"><span>Pay period</span><b>${esc(fmtMonth(s.period))}</b></div></div>
   <div class="pad">
     <div class="grid">${info("Employee name", e.name)}${info("Employee ID", e.empCode)}${info("Department", e.department)}${info("Designation", e.designation ?? "")}${info("Date of joining", e.joinDate ? fmtDate(e.joinDate, true) : "")}${info("Days paid", s.daysPaid !== null ? String(s.daysPaid) : "")}</div>
+    ${att}
     <table><thead><tr><th>Earnings</th><th class="n">Amount</th><th class="gap"></th><th>Deductions</th><th class="n">Amount</th></tr></thead><tbody>${body}</tbody>
       <tfoot><tr><td>Gross earnings</td><td class="n">${rupees(s.gross)}</td><td></td><td>Total deductions</td><td class="n">${rupees(s.totalDeductions)}</td></tr></tfoot></table>
     <div class="net"><div><div class="lab">Net pay (take home)</div><div class="words"><b>${esc(amountInWords(s.net))}</b></div></div><div class="amt">${rupees(s.net)}</div></div>

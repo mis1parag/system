@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { MidapError } from "@/server/sheets/db";
 import { runSetup, setupStatus } from "@/server/domain/system";
 import { getDb } from "@/server/runtime";
+import { googleConfigFromEnv } from "@/lib/google-oauth";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const st = await setupStatus(getDb());
-    return NextResponse.json({ ok: true, ...st, needsKey: !!process.env.SETUP_KEY, demo: !!process.env.SHEETS_API_BASE });
+    return NextResponse.json({ ok: true, ...st, needsKey: !!process.env.SETUP_KEY, demo: !!process.env.SHEETS_API_BASE, google: !!googleConfigFromEnv() });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Could not reach Google Sheets" }, { status: 200 });
   }

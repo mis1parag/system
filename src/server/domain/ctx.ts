@@ -18,6 +18,8 @@ export class Ctx {
   settings: Record<string, string>;
   warnings: string[] = [];
   outbox: Outbox[] = [];
+  /** Mail_Log rows queued by this request (salary slips): sent right after the change is saved */
+  mailIds: string[] = [];
 
   roles: Rec[];
   system: boolean;

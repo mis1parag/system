@@ -20,6 +20,8 @@ env.CRON_SECRET ? ok("CRON_SECRET set (the reminder scheduler can be called safe
 /^https:\/\//.test(env.APP_URL ?? "") ? ok(`APP_URL is ${env.APP_URL}`) : maybe("APP_URL is not an https address — links in emails / WhatsApp would be wrong (set it after the first deploy)");
 env.SETUP_KEY ? ok("SETUP_KEY set (nobody else can claim a fresh install)") : maybe("SETUP_KEY not set — fine if you move your people with migrate-to-live (setup is then closed anyway)");
 env.SMTP_URL ? ok("email (SMTP) is set") : maybe("email is not set — alerts stay inside the app (bell) only");
+env.SMTP_URL && env.MAIL_FROM ? ok("MAIL_FROM is set (salary slips can be e-mailed)") : env.SMTP_URL ? maybe("MAIL_FROM is not set — some mail servers refuse mail without a sender") : maybe("salary slips will wait in Payroll → E-mails until SMTP_URL is set (nothing is lost)");
+env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET && /^https:\/\//.test(env.APP_URL ?? "") ? ok("Google sign-in is configured (redirect: " + env.APP_URL.replace(/\/$/, "") + "/api/auth/google/callback)") : maybe("Google sign-in is not configured (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET and an https APP_URL) — people sign in with their PIN");
 
 console.log("\nGoogle");
 let cfg;

@@ -3,6 +3,7 @@ import type { Flow } from "../../lib/flow-types.ts";
 import { Db, MidapError, newId, require_ } from "./../sheets/db.ts";
 import { hashPin } from "./auth.ts";
 import { loadSettings, makeCtx } from "./ctx.ts";
+import { processMailQueue } from "./mail-log.ts";
 import { tick, type TickResult } from "./cron.ts";
 import { addEntries } from "./entries.ts";
 import { deliver, deliveryFromEnv, type DeliveryConfig } from "./notify.ts";
@@ -47,7 +48,7 @@ export async function runSetup(db: Db, d: { name: string; mobile: string; email?
 }
 
 /** Run the scheduler once (reminders, overdue alerts, escalations, recurring entries, digest) and send any email / WhatsApp. */
-export async function runTick(db: Db, cfg: DeliveryConfig = deliveryFromEnv(), now?: Date): Promise<TickResult & { errors: string[] }> {
+export async function runTick(db: Db, cfg: DeliveryConfig = deliveryFromEnv(), now?: Date): Promise<TickResult & { errors: string[]; mails: { sent: number; failed: number } }> {
   const ctx = await makeCtx(db, "cron", now);
   const result = await tick(ctx);
   await ctx.tx.commit();
@@ -56,7 +57,10 @@ export async function runTick(db: Db, cfg: DeliveryConfig = deliveryFromEnv(), n
     const { Users } = await db.load(["Users"]);
     errors = (await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "MIDAP"))).errors;
   }
-  return { ...result, errors };
+  // salary-slip e-mails that are due again (failed earlier, or waiting for e-mail to be set up)
+  const mails = await processMailQueue(db, cfg, { now }).catch((e) => ({ sent: 0, failed: 0, waiting: 0, notes: [String(e?.message ?? e)] }));
+  errors = errors.concat(mails.notes.filter((n) => !/not set up/.test(n)));
+  return { ...result, errors, mails: { sent: mails.sent, failed: mails.failed } };
 }
 
 /** Create an entry from outside the app (Google Form, another system). Keys may be field keys or field labels. */

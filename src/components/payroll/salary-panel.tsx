@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable, EmptyState, ErrorBox, Field, Pill, Spinner } from "@/components/common";
+import { MailLog } from "@/components/payroll/mail-log";
+import { PayFromAttendance, SalaryStructures } from "@/components/payroll/pay-from-attendance";
 import { slipHtml, type SlipDoc } from "@/lib/slip-html";
 import { rupees } from "@/lib/money";
 import { parseCsv } from "@/lib/csv";
@@ -27,18 +29,18 @@ export function SalaryPanel() {
   const { allow, isSuper, peopleFor } = useFlows();
   const prepares = isSuper || (["create", "edit", "approve", "manage", "import"] as const).some((a) => allow("payroll", a));
   const people = peopleFor("payroll");
-  const [tab, setTab] = useState<"mine" | "manage">("mine");
+  const [tab, setTab] = useState<"mine" | "manage" | "attendance" | "salary" | "mails">("mine");
   return (
     <div>
       <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground"><LockIcon className="size-3.5" /> You can open only your own slips, once they are published. Your reporting manager cannot see them.</p>
       {prepares && (
         <div className="mb-4 flex gap-1.5">
-          {([["mine", "My slips"], ["manage", `Payroll${people.length > 1 || isSuper ? ` (${people.length})` : ""}`]] as const).map(([k, l]) => (
+          {([["mine", "My slips"], ["manage", `Slips${people.length > 1 || isSuper ? ` (${people.length})` : ""}`], ["attendance", "From attendance"], ["salary", "Monthly salary"], ["mails", "E-mails"]] as const).map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} aria-pressed={tab === k} className={cn("rounded-full border px-3 py-1 text-xs font-medium", tab === k ? "border-primary bg-[#efeeff] text-[#4b3fd6]" : "bg-card text-muted-foreground hover:bg-muted")}>{l}</button>
           ))}
         </div>
       )}
-      {tab === "mine" || !prepares ? <Mine /> : <Payroll />}
+      {tab === "mine" || !prepares ? <Mine /> : tab === "manage" ? <Payroll /> : tab === "attendance" ? <PayFromAttendance /> : tab === "mails" ? <MailLog /> : <SalaryStructures />}
     </div>
   );
 }
@@ -51,7 +53,6 @@ function Mine() {
   const [reqs, setReqs] = useState<SlipReq[]>([]);
   const [error, setError] = useState("");
   const [year, setYear] = useState("");
-  const [open, setOpen] = useState<Opened | null>(null);
   const [asking, setAsking] = useState(false);
   const load = useCallback(async () => {
     const r = await call<{ slips: Slip[] }>("listSlips", {});
@@ -65,10 +66,10 @@ function Mine() {
   const shown = (slips ?? []).filter((s) => !year || s.period.startsWith(year));
   const mine = reqs.filter((q) => q.status === "Pending" || q.status === "Declined").slice(0, 6);
 
-  async function view(s: Slip) {
+  async function download(s: Slip) {
     const r = await call<Opened>("getSlip", { slipId: s.slipId });
-    if (!r.ok) { toast.error(r.error || "Could not open the slip"); return; }
-    setOpen(r.data!);
+    if (!r.ok) { toast.error(r.error || "Could not get the slip"); return; }
+    printDoc(r.data!);
   }
   if (error) return <ErrorBox message={error} onRetry={load} />;
   if (!slips) return <p className="py-6 text-center text-sm text-muted-foreground"><Spinner className="mr-2 inline" /> Opening…</p>;
@@ -89,13 +90,12 @@ function Mine() {
       {!slips.length && <EmptyState title="No salary slip yet" hint="When payroll publishes your slip for a month it appears here. If one is missing, use “Request a salary slip”." />}
       <div className="grid gap-2">
         {shown.map((s) => (
-          <button key={s.slipId} onClick={() => view(s)} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-left hover:bg-muted/40">
-            <div><div className="font-medium">{fmtMonth(s.period)}</div><div className="text-xs text-muted-foreground">{s.daysPaid !== null ? `${s.daysPaid} days paid` : "Salary slip"}</div></div>
-            <div className="flex items-center gap-3"><span className="font-semibold tabular-nums">{rupees(s.net)}</span><EyeIcon className="size-4 text-muted-foreground" /></div>
-          </button>
+          <div key={s.slipId} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
+            <div><div className="font-medium">{fmtMonth(s.period)}</div><div className="text-xs text-muted-foreground">Salary slip{s.publishedAt ? ` · issued ${s.publishedAt.slice(0, 10)}` : ""}</div></div>
+            <Button size="sm" onClick={() => download(s)}><DownloadIcon /> Download</Button>
+          </div>
         ))}
       </div>
-      {open && <SlipDialog o={open} onClose={() => setOpen(null)} />}
       {asking && <AskDialog today={today} have={new Set((slips ?? []).map((s) => s.period))} onClose={(sent) => { setAsking(false); if (sent) load(); }} />}
     </>
   );
@@ -128,7 +128,15 @@ function AskDialog({ today, have, onClose }: { today: string; have: Set<string>;
   );
 }
 
-/** The slip as the finished A4 document, with print / save as PDF. */
+/** Download: the finished slip opens in its own window, ready to save as PDF or print. The amounts are never shown inside the app to the employee. */
+function printDoc(o: Opened) {
+  const w = window.open("", "_blank", "width=900,height=1000");
+  if (!w) { toast.error("Allow pop-ups to download your slip"); return; }
+  w.document.write(slipHtml(o as unknown as SlipDoc));
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 500);
+}
+
+/** The slip as the finished A4 document, with print / save as PDF (for payroll people, who prepare it). */
 function SlipDialog({ o, onClose }: { o: Opened; onClose: () => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const html = useMemo(() => slipHtml(o as unknown as SlipDoc), [o]);

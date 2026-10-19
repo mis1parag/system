@@ -8,6 +8,7 @@ import { runAction } from "../src/server/api.ts";
 import { runSetup } from "../src/server/domain/system.ts";
 import { calFrom, leaveDays, leaveDaysInYear, yearBalance } from "../src/lib/attendance.ts";
 import { runTick } from "../src/server/domain/system.ts";
+import { processMailQueue, setMailTransport } from "../src/server/domain/mail-log.ts";
 
 process.env.VAULT_KEY = "22".repeat(32);
 const fake = createFakeSheets({});
@@ -124,7 +125,7 @@ ok(pub1.ok && pub1.data.changed === 1, "payroll publishes");
 const rn = (await bundle(ROHAN)).notifications.find((n) => /salary slip/i.test(n.title));
 ok(rn && !/\d{4,}/.test(rn.body + rn.title.replace(/\d{4}-\d\d/, "")), "Rohan is told the slip is ready — with no amount in the message");
 const mine = await call(ROHAN, "listSlips", {});
-ok(mine.data.slips.length === 1 && mine.data.slips[0].net === 26200, "Rohan sees his slip");
+ok(mine.data.slips.length === 1 && mine.data.slips[0].hidden === true && mine.data.slips[0].net === 0, "Rohan sees that his slip exists — but not the salary figures");
 const opened = await call(ROHAN, "getSlip", { slipId: s1.data.slipId });
 ok(opened.ok && opened.data.slip.earnings.length === 2 && opened.data.employee.name === "Rohan" && opened.data.slip.viewedAt, "…opens it (and the first opening is remembered)");
 ok(denied(await call(ASHA, "getSlip", { slipId: s1.data.slipId })) && denied(await call(MEERA, "getSlip", { slipId: s1.data.slipId })) && denied(await call(BOSS2, "getSlip", { slipId: s1.data.slipId })), "a colleague, his reporting manager and another manager cannot open it by id");
@@ -264,6 +265,48 @@ ok((await call(ROHAN, "listSlipRequests", {})).data.requests.find((q) => q.reqId
 const opened2 = await call(ROHAN, "getSlip", { slipId: sl2.data.slipId });
 ok(opened2.ok && "designation" in opened2.data.employee, "the slip carries the employee details used in the printed layout");
 
+// =============================================================== salary from attendance, waive-off, hidden salary
+section("salary from attendance: loss of pay, waive-off, nothing visible to the employee");
+ok(denied(await call(ROHAN, "saveStructure", { userId: ROHAN, earnings: [{ label: "Basic", amount: 99999 }] })) && denied(await call(MEERA, "saveStructure", { userId: ROHAN, earnings: [{ label: "Basic", amount: 1 }] })), "an employee and a manager cannot set a salary (not even their own)");
+ok(denied(await call(ROHAN, "listStructures", {})) && denied(await call(MEERA, "payrollPreview", { period: "2026-09" })) && denied(await call(ROHAN, "generatePaySlips", { period: "2026-09" })), "…nor read salaries, the preview or make slips");
+ok(denied(await call(PAY, "saveStructure", { userId: PAY, earnings: [{ label: "Basic", amount: 5 }] })), "payroll cannot set their own salary either");
+ok(!(await call(PAY, "saveStructure", { userId: ROHAN, earnings: [] })).ok && !(await call(PAY, "saveStructure", { userId: ROHAN, earnings: [{ label: "Basic", amount: 100 }], deductions: [{ label: "PF", amount: 500 }] })).ok, "a salary needs an earning, and deductions cannot exceed it");
+const payStruct = await call(PAY, "saveStructure", { userId: ROHAN, earnings: [{ label: "Basic", amount: 20000 }, { label: "HRA", amount: 10000 }], deductions: [{ label: "PF", amount: 1800 }] });
+ok(payStruct.ok && payStruct.data.gross === 30000, `payroll sets Rohan's monthly pay: ${payStruct.error ?? ""}`);
+ok((await call(PAY, "listStructures", {})).data.structures.some((s) => s.userId === ROHAN && s.gross === 30000) && !JSON.stringify(await bundle(ROHAN)).includes("30000") && !JSON.stringify(await bundle(MEERA)).includes("30000"), "the figure is in payroll's list only — not in anybody's page data");
+// September 2026: 26 working days (Sundays off). Rohan is present on 24, absent on 10 and 11 Sept, and comes late on two of the days.
+const paySep = []; for (let day = 1; day <= 30; day++) { const dd = String(day).padStart(2, "0"); const dow = new Date(`2026-09-${dd}T00:00:00Z`).getUTCDay(); if (dow === 0 || day === 10 || day === 11) continue; paySep.push({ userId: ROHAN, checkIn: `2026-09-${dd} ${day === 2 || day === 3 ? "10:15" : "09:05"}`, checkOut: `2026-09-${dd} 18:00` }); }
+ok((await call(boss, "importAttendance", { rows: paySep })).data.added === 24, "24 days of attendance for September are in");
+const payPv = await call(PAY, "payrollPreview", { period: "2026-09" });
+const payR1 = payPv.data.rows.find((r) => r.userId === ROHAN);
+ok(payPv.ok && payR1.calc.absentDates.join() === "2026-09-10,2026-09-11" && payR1.calc.lopDays === 2 && payR1.calc.lopAmount === 2000 && payR1.net === 26200 && payR1.calc.paidDays === 28, `September: 2 absent days → loss of pay ₹2,000, net ₹26,200 → ${JSON.stringify({ lop: payR1?.calc?.lopDays, amt: payR1?.calc?.lopAmount, net: payR1?.net })}`);
+ok(payPv.data.rows.find((r) => r.userId === ASHA) === undefined || payPv.data.rows.find((r) => r.userId === ASHA).hasStructure === false, "people without a salary show 'no salary set'");
+ok(!(await call(PAY, "payrollPreview", { period: "2027-12" })).ok, "a month that has not come is refused");
+ok(denied(await call(MEERA, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-10", kind: "absent", reason: "x" })) && denied(await call(ROHAN, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-10", kind: "absent", reason: "x" })), "only payroll can waive off — not a manager, not the employee");
+ok(!(await call(PAY, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-05", kind: "absent", reason: "x" })).ok && !(await call(PAY, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-10", kind: "absent", reason: "" })).ok, "a day that was not an absence cannot be waived, and a reason is needed");
+ok((await call(PAY, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-10", kind: "absent", reason: "official visit" })).ok, "payroll waives off 10 September (official visit)");
+const payR2 = (await call(PAY, "payrollPreview", { period: "2026-09" })).data.rows.find((r) => r.userId === ROHAN);
+ok(payR2.calc.lopDays === 1 && payR2.net === 27200 && payR2.waivers.length === 1, `the waived day is paid: loss of pay 1 day, net ₹27,200 → ${payR2.net}`);
+ok(!(await call(PAY, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-10", kind: "absent", reason: "again" })).ok, "waiving the same day twice is refused");
+ok((await call(boss, "saveSettings", { settings: { PAY_LATE_MARKS: "2" } })).ok && !(await call(boss, "saveSettings", { settings: { PAY_LATE_MARKS: "-1" } })).ok, "the late-arrival rule: every 2 late marks = half a day (a bad value is refused)");
+const payR3 = (await call(PAY, "payrollPreview", { period: "2026-09" })).data.rows.find((r) => r.userId === ROHAN);
+ok(payR3.calc.lateDates.length === 2 && payR3.calc.lateDeductDays === 0.5 && payR3.calc.lateAmount === 500 && payR3.net === 26700, `two late marks cost half a day (₹500): net ₹26,700 → ${payR3.net}`);
+ok((await call(PAY, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-02", kind: "late", reason: "bus strike" })).ok && (await call(PAY, "payrollPreview", { period: "2026-09" })).data.rows.find((r) => r.userId === ROHAN).calc.lateDeductDays === 0, "waiving one late mark leaves one: no deduction");
+const payGen = await call(PAY, "generatePaySlips", { period: "2026-09", userIds: [ROHAN] });
+ok(payGen.ok && payGen.data.made === 1, `draft slip made from attendance: ${payGen.error ?? ""}`);
+const paySlip = (await call(PAY, "listSlips", { everyone: true, period: "2026-09" })).data.slips.find((s) => s.userId === ROHAN);
+ok(paySlip && paySlip.status === "Draft" && paySlip.gross === 30000 && paySlip.daysPaid === 29 && paySlip.net === 27200 && paySlip.deductions.some((d) => /Loss of pay \(1 day\)/.test(d.label)) && paySlip.att.lop === 1 && paySlip.att.waived === 2 && /Waived off/.test(paySlip.note), `the slip carries pay, deductions, paid days and the attendance summary → ${JSON.stringify({ net: paySlip?.net, days: paySlip?.daysPaid })}`);
+ok((await call(PAY, "setPayWaiver", { userId: ROHAN, period: "2026-09", date: "2026-09-11", kind: "absent", reason: "also waived" })).ok && (await call(PAY, "generatePaySlips", { period: "2026-09", userIds: [ROHAN] })).data.replaced === 1, "waive another day and redo the draft: it is replaced, not doubled");
+ok((await call(PAY, "listSlips", { everyone: true, period: "2026-09" })).data.slips.filter((s) => s.userId === ROHAN).length === 1, "one slip per person per month");
+const payPub = await call(PAY, "publishSlips", { slipIds: [paySlip.slipId] });
+ok(payPub.ok && (payPub.warnings ?? []).some((w) => /E-mail is not set up/.test(w)), "publishing tries to e-mail the slip; with no mail server set up it says so (the slip is still published)");
+ok((await call(PAY, "generatePaySlips", { period: "2026-09", userIds: [ROHAN] })).ok === false, "a published slip is never regenerated");
+const payMine = (await call(ROHAN, "listSlips", {})).data.slips.find((s) => s.period === "2026-09");
+ok(payMine && payMine.hidden === true && payMine.net === 0 && payMine.gross === 0 && payMine.earnings.length === 0 && payMine.deductions.length === 0, "Rohan's own list shows that the slip exists — with no salary figure at all");
+const payDl = await call(ROHAN, "getSlip", { slipId: paySlip.slipId });
+ok(payDl.ok && payDl.data.slip.net === 28200 && payDl.data.slip.att.lop === 0 && payDl.data.slip.att.waived === 3, "…the figures are in the slip he downloads");
+ok(!JSON.stringify(await bundle(ROHAN)).includes("28200") && !JSON.stringify(await call(ROHAN, "listSlipRequests", {})).includes("28200"), "no salary figure anywhere else in his data");
+
 section("an entry can have its own people; each person sees only their steps");
 const two = await call(boss, "createFlow", { name: "Two step", fields: [{ key: "po", label: "PO", type: "text", required: true }, { key: "due", label: "Due", type: "date", required: true }], anchorField: "due", titleFields: ["po"], steps: [{ stepId: "s1", name: "First", assigneeId: ROHAN, rule: { base: "anchor", offsetDays: 0 } }, { stepId: "s2", name: "Second", assigneeId: ROHAN, rule: { base: "anchor", offsetDays: 1 } }] });
 ok(two.ok, `a two-step FMS: ${two.error ?? ""}`);
@@ -362,7 +405,7 @@ ok(!(await call(OTHER_SA, "adminEditRow", { table: "Users", id: ASHA, changes: {
 ok(!(await call(OTHER_SA, "adminEditRow", { table: "Users", id: ASHA, changes: { role: "KING" } })).ok && !(await call(OTHER_SA, "adminEditRow", { table: "Users", id: ASHA, changes: { managerId: "USR-NOBODY" } })).ok && !(await call(OTHER_SA, "adminEditRow", { table: "Users", id: ASHA, changes: { empCode: (await bundle(OTHER_SA)).users.find((u) => u.userId === ROHAN).empCode } })).ok, "a wrong role, a manager who does not exist or a repeated Employee ID is refused");
 ok(!(await call(OTHER_SA, "adminEditRow", { table: "Users", id: OTHER_SA, changes: { status: "Inactive" } })).ok, "the last Super Admin cannot be switched off from here either");
 ok(!(await call(OTHER_SA, "adminEditRow", { table: "Users", id: ASHA, changes: { department: "Dispatch" } })).ok, "an edit that changes nothing says so");
-const attRow = (await call(OTHER_SA, "adminRows", { table: "Attendance", q: ROHAN })).data.rows[0];
+const attRow = (await call(OTHER_SA, "adminRows", { table: "Attendance", q: ROHAN })).data.rows.find((r) => r.date === TODAY);
 ok(!(await call(OTHER_SA, "adminEditRow", { table: "Attendance", id: attRow.attId, changes: { checkOut: "2026-10-07 08:00" } })).ok && (await call(OTHER_SA, "adminEditRow", { table: "Attendance", id: attRow.attId, changes: { checkOut: "2026-10-07 18:10" } })).ok, "attendance: a check-out before the check-in is refused, a real one is saved");
 // a step corrected by hand updates the entry
 const stepsNow = (await bundle(OTHER_SA)).tasks.filter((t) => t.flowId === fl.data.flowId && t.status === "Pending");
@@ -398,6 +441,112 @@ ok((await bundle(MEERA)).notifications.some((n) => /Office closed/.test(n.title)
 ok((await call(OTHER_SA, "saveAnnouncement", { title: "Welcome", audience: "all", startDate: "2026-12-01" })).ok && (await call(MEERA, "listAnnouncements", {})).data.announcements.length === 1, "a notice with a future start is not shown yet");
 ok(!(await call(OTHER_SA, "saveAnnouncement", { title: "", audience: "all" })).ok && !(await call(OTHER_SA, "saveAnnouncement", { title: "x", audience: "everybody" })).ok && !(await call(OTHER_SA, "saveAnnouncement", { title: "x", audience: "all", startDate: "2026-12-05", endDate: "2026-12-01" })).ok, "empty title, bad audience, reversed dates are refused");
 ok(denied(await call(MEERA, "deleteAnnouncement", { annId: an.data.annId })) && (await call(OTHER_SA, "deleteAnnouncement", { annId: an.data.annId })).ok && (await call(MEERA, "listAnnouncements", {})).data.announcements.length === 0, "only the Super Admin removes a notice");
+
+// =============================================================== salary-slip e-mail: delivery log, no duplicates, retry
+section("salary slip e-mail: delivery log, no duplicate mails, retry");
+const sent = []; let breakSmtp = false;
+setMailTransport({ async sendMail(m) { if (breakSmtp) throw new Error("connection refused"); sent.push(m); } });
+const CFG = { smtpUrl: "smtp://fake", mailFrom: "MIDAP <hr@test>", appUrl: "https://fms.test" };
+const callM = (actor, action, data = {}, when) => runAction(db, actor, action, data, { now: when ? at(...[].concat(when)) : at("2026-10-07"), delivery: CFG });
+const MAILEE = await mk("Mailee", "STAFF", "9000000061", "Sales", MEERA, { email: "mailee@test.in" });
+const MIA = await mk("Mia", "STAFF", "9000000062", "Sales", MEERA); // no e-mail address
+const mailSlip = (userId, period) => ({ userId, period, daysPaid: 30, earnings: [{ label: "Basic", amount: 41111 }], deductions: [{ label: "PF", amount: 1800 }], note: "" });
+const mkSlip = async (userId, period) => (await call(PAY, "saveSlip", mailSlip(userId, period))).data.slipId;
+const log = async (extra = {}) => (await call(PAY, "listMailLog", extra)).data;
+
+const sA = await mkSlip(MAILEE, "2026-05");
+const pA = await callM(PAY, "publishSlips", { slipIds: [sA] });
+let lg = await log();
+const rowA = lg.mails.find((m) => m.refId === sA);
+ok(pA.ok && sent.length === 1 && sent[0].to === "mailee@test.in" && rowA?.status === "Sent" && rowA.attempts === 1 && rowA.sentAt, `publishing mails the slip to the right address and logs it as Sent → ${JSON.stringify({ n: sent.length, st: rowA?.status })}`);
+ok(/https:\/\/fms\.test\/api\/slip\/SLP/.test(sent[0].text) && sent[0].attachments.length === 1 && /salary-slip-2026-05/.test(sent[0].attachments[0].filename), "the mail has the private link and the slip as an attachment");
+ok(!JSON.stringify(await call(PAY, "listMailLog", {})).match(/41111|39311/) && !/41,111|39,311/.test(sent[0].text), "no salary figure in the log or in the mail text");
+// republish / retry / run twice: still one mail
+await callM(PAY, "publishSlips", { slipIds: [sA], publish: false });
+ok((await log()).mails.find((m) => m.refId === sA).status === "Sent", "taking a slip back to draft does not change a mail that already went");
+await callM(PAY, "publishSlips", { slipIds: [sA] });
+await processMailQueue(db, CFG, { now: at("2026-10-07") }); await runTick(db, CFG, at("2026-10-08"));
+lg = await log();
+ok(sent.length === 1 && lg.mails.filter((m) => m.refId === sA).length === 1, `publishing again, a retry pass and the scheduler do not mail the same slip twice (${sent.length} mail, ${lg.mails.filter((m) => m.refId === sA).length} log row)`);
+// corrected figures are a new version → mailed
+await callM(PAY, "publishSlips", { slipIds: [sA], publish: false });
+await call(PAY, "saveSlip", { ...mailSlip(MAILEE, "2026-05"), slipId: sA, earnings: [{ label: "Basic", amount: 42000 }] });
+await callM(PAY, "publishSlips", { slipIds: [sA] });
+ok(sent.length === 2 && (await log()).mails.filter((m) => m.refId === sA && m.status === "Sent").length === 2, "a slip corrected after sending is a new version and is mailed once more");
+// failure → Failed with reason → retried later
+breakSmtp = true;
+const sB = await mkSlip(MAILEE, "2026-04");
+const pB = await callM(PAY, "publishSlips", { slipIds: [sB] });
+let rowB = (await log()).mails.find((m) => m.refId === sB);
+ok(pB.ok && rowB.status === "Failed" && rowB.attempts === 1 && /connection refused/.test(rowB.lastError) && rowB.nextTry, `a failed delivery is kept as Failed with the reason and a next try → ${JSON.stringify({ st: rowB?.status, err: rowB?.lastError })}`);
+ok((pB.warnings ?? []).some((w) => /could not be sent/.test(w)) && (await call(MAILEE, "listSlips", {})).data.slips.some((s) => s.period === "2026-04"), "payroll is told; the slip itself is still published and downloadable");
+breakSmtp = false;
+const early = await processMailQueue(db, CFG, { now: at("2026-10-07", "10:05") });
+ok(early.sent === 0 && (await log()).mails.find((m) => m.refId === sB).status === "Failed", "the scheduler does not retry before the waiting time (15 minutes) is over");
+const retryRun = await processMailQueue(db, CFG, { now: at("2026-10-07", "10:20") });
+rowB = (await log()).mails.find((m) => m.refId === sB);
+ok(retryRun.sent === 1 && rowB.status === "Sent" && rowB.attempts === 2 && sent.length === 3, "…and after it the retry sends it (once)");
+// gives up after 5 attempts; manual Retry starts again
+breakSmtp = true;
+const sC = await mkSlip(MAILEE, "2026-03");
+await callM(PAY, "publishSlips", { slipIds: [sC] });
+for (let i = 1; i <= 6; i++) await processMailQueue(db, CFG, { now: at("2026-10-" + String(7 + i).padStart(2, "0")) });
+let rowC = (await log()).mails.find((m) => m.refId === sC);
+ok(rowC.status === "Failed" && rowC.attempts === 5, `after 5 failed tries it stops (${rowC.attempts}) and waits for a person`);
+breakSmtp = false;
+ok(denied(await call(MEERA, "retryMails", { mailIds: [rowC.mailId] })) && denied(await call(MAILEE, "retryMails", {})), "only payroll can press Retry");
+const rt = await callM(PAY, "retryMails", { mailIds: [rowC.mailId] });
+rowC = (await log()).mails.find((m) => m.refId === sC);
+ok(rt.ok && rowC.status === "Sent" && sent.length === 4, "Retry sends it");
+// no e-mail address
+const sD = await mkSlip(MIA, "2026-05");
+const pD = await callM(PAY, "publishSlips", { slipIds: [sD] });
+let rowD = (await log()).mails.find((m) => m.refId === sD);
+ok(pD.ok && rowD.status === "Failed" && /no e-mail address/.test(rowD.lastError) && sent.length === 4, "a person without an e-mail address is logged as Failed with the reason (nothing sent to a wrong address)");
+await call(SA, "saveUser", { userId: MIA, name: "Mia", mobile: "9000000062", department: "Sales", managerId: MEERA, email: "mia@test.in" });
+await callM(PAY, "retryMails", { mailIds: [rowD.mailId] });
+rowD = (await log()).mails.find((m) => m.refId === sD);
+ok(rowD.status === "Sent" && sent[4]?.to === "mia@test.in", "…after the address is added, Retry sends it to the new address");
+// privacy of the log + resend
+ok(denied(await call(ROHAN, "listMailLog", {})) && denied(await call(MEERA, "listMailLog", {})) && denied(await call(MAILEE, "resendSlipMail", { slipId: sA })), "the e-mail log is for payroll only");
+const rs = await callM(PAY, "resendSlipMail", { slipId: sA });
+ok(rs.ok && sent.length === 6, `a deliberate "send again" works even though the slip was sent before (${sent.length} mails)`);
+// two runs at the same moment
+const sE = await mkSlip(MAILEE, "2026-02");
+setMailTransport({ async sendMail(m) { await new Promise((r) => setTimeout(r, 30)); sent.push(m); } });
+await call(PAY, "publishSlips", { slipIds: [sE] }); // no delivery config: queued only
+const sentBefore = sent.length;
+await Promise.all([processMailQueue(db, CFG, { now: at("2026-10-07") }), processMailQueue(db, CFG, { now: at("2026-10-07") }), runTick(db, CFG, at("2026-10-07"))]);
+ok(sent.length === sentBefore + 1 && (await log()).mails.filter((m) => m.refId === sE && m.status === "Sent").length === 1, "three runs at the same moment send a queued slip exactly once");
+// e-mail not set up → waits, then goes out
+setMailTransport({ async sendMail(m) { sent.push(m); } });
+const sF = await mkSlip(MAILEE, "2026-01");
+const noSmtp = await call(PAY, "publishSlips", { slipIds: [sF] });
+let rowF = (await log()).mails.find((m) => m.refId === sF);
+ok(noSmtp.ok && (noSmtp.warnings ?? []).some((w) => /E-mail is not set up/.test(w)) && rowF.status === "Pending", "with no mail server the mail waits as Pending (not lost, not Failed)");
+const nWait = sent.length;
+await processMailQueue(db, CFG, { now: at("2026-10-07") });
+ok(sent.length === nWait + 1 && (await log()).mails.find((m) => m.refId === sF).status === "Sent", "…and goes out as soon as e-mail is set up");
+// taken back before it was sent → cancelled
+setMailTransport({ async sendMail(m) { sent.push(m); } });
+const sG = await mkSlip(ASHA, "2026-01");
+await call(SA, "saveUser", { userId: ASHA, name: "Asha", mobile: "9000000023", department: "Stores", email: "asha@test.in" });
+await call(PAY, "publishSlips", { slipIds: [sG] });
+await call(PAY, "publishSlips", { slipIds: [sG], publish: false });
+const nCancel = sent.length; await processMailQueue(db, CFG, { now: at("2026-10-07") });
+ok(sent.length === nCancel && (await log()).mails.find((m) => m.refId === sG).status === "Cancelled", "a slip taken back to draft before it was sent is cancelled, not mailed");
+ok((await call(SA, "saveSettings", { settings: { PAY_EMAIL_ATTACH: "N" } })).ok, "the attachment can be switched off (link only)");
+setMailTransport(null);
+
+// =============================================================== kiosk punches feed the salary
+section("kiosk attendance is the same attendance: it counts for salary");
+ok((await call(PAY, "saveStructure", { userId: MAILEE, earnings: [{ label: "Basic", amount: 31000 }] })).ok, "a salary for Mailee (August 2026: 31 days, Sundays off)");
+const kp = await call(SA, "kioskPunch", { empCode: "MAI1" }, ["2026-08-03", "09:00"]);
+const ko = await call(SA, "kioskPunch", { empCode: "MAI1" }, ["2026-08-03", "18:00"]);
+ok(kp.ok && kp.data.action === "in" && ko.ok && ko.data.action === "out" && ko.data.attendance.source === "kiosk" && ko.data.attendance.checkOut === "2026-08-03 18:00", "a kiosk check-in and check-out are saved as one row with the right times");
+const k08 = (await call(PAY, "payrollPreview", { period: "2026-08" })).data.rows.find((r) => r.userId === MAILEE);
+ok(k08.calc.present === 1 && !k08.calc.absentDates.includes("2026-08-03") && k08.calc.absentDates.includes("2026-08-04"), "the kiosk day counts as present for salary; a day without any punch is still an absence");
+ok((await call(SA, "getFlowData", {}, ["2026-08-03", "19:00"])).data.attendance.filter((r) => r.userId === MAILEE && r.date === "2026-08-03").length === 1, "…and it is in the main attendance sheet once (no duplicate)");
 
 // =============================================================== check-in / check-out
 section("check-in and check-out: repeated clicks and bad order");

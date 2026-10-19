@@ -42,6 +42,7 @@ async function punchOut(ctx: Ctx, userId: string, d: Record<string, unknown>) {
   const open = alive(await ctx.tx.rows("Attendance")).filter((r) => r.userId === userId && !r.checkOut).sort((a, b) => String(b.checkIn).localeCompare(String(a.checkIn)))[0];
   require_(open, "Not checked in. Check in first.");
   require_(open.date === ctx.clock.date, `The last check-in (${open.date} ${String(open.checkIn).slice(11, 16)}) was never closed. Ask an admin to correct it.`);
+  require_(minutesBetween(String(open.checkIn), ctx.clock.dt) >= 1, `${userId === ctx.actorId ? "You" : "This person"} checked in at ${String(open.checkIn).slice(11, 16)}, just now. Wait a minute before checking out (a double scan or double tap is ignored).`);
   open.checkOut = ctx.clock.dt; open.outLat = coord(d.lat, 90); open.outLng = coord(d.lng, 180);
   open.outPhoto = keepPhoto(ctx, String(open.attId), userId, "out", d.photo);
   if (str(d.note)) open.note = [open.note, str(d.note)].filter(Boolean).join(" · ").slice(0, 200);

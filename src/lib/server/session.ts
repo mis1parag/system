@@ -54,3 +54,30 @@ export async function clearSession() {
   const store = await cookies();
   store.delete(COOKIE);
 }
+
+// ---- Google sign-in: the one-time values (state, PKCE verifier, nonce) live in a signed, short-lived cookie between the two redirects ----
+const OAUTH_COOKIE = "midap_oauth";
+const OAUTH_AGE = 10 * 60;
+export interface OauthState { state: string; verifier: string; nonce: string; next: string }
+
+export async function setOauthState(o: OauthState) {
+  const body = Buffer.from(JSON.stringify({ ...o, exp: Date.now() + OAUTH_AGE * 1000 })).toString("base64url");
+  const store = await cookies();
+  store.set(OAUTH_COOKIE, `${body}.${sign(body)}`, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/auth/google", maxAge: OAUTH_AGE });
+}
+
+/** Reads and removes the cookie (it can be used once). Null when missing, tampered with or older than 10 minutes. */
+export async function takeOauthState(): Promise<OauthState | null> {
+  const store = await cookies();
+  const token = store.get(OAUTH_COOKIE)?.value;
+  store.delete({ name: OAUTH_COOKIE, path: "/api/auth/google" });
+  if (!token) return null;
+  const [body, sig] = token.split(".");
+  if (!body || !sig) return null;
+  const a = Buffer.from(sig), b = Buffer.from(sign(body));
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  try {
+    const o = JSON.parse(Buffer.from(body, "base64url").toString()) as OauthState & { exp: number };
+    return o.exp > Date.now() ? { state: o.state, verifier: o.verifier, nonce: o.nonce, next: o.next } : null;
+  } catch { return null; }
+}

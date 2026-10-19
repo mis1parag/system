@@ -96,7 +96,8 @@ export default function ControlCenterPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             {sel("ATT_GATE", "Check-in screen", "When someone opens the app on a working day without checking in.", [["required", "Must check in first"], ["prompt", "Ask, they can postpone"], ["off", "Do not ask"]])}
             {sel("ATT_SELF_PUNCH", "Where can people check in?", "Kiosk only = reception PC with the Employee ID.", [["Y", "From their own phone or PC"], ["N", "Only at the office kiosk"]])}
-            {sel("ATT_PHOTO", "Photo with a check-in", "Always optional for the person.", [["N", "Not asked"], ["Y", "Offered every time"]])}
+            {sel("ATT_PHOTO", "Camera photo with a check-in", "Compulsory = no check-in without a photo (excused people are listed under Laptops & camera).", [["N", "Not asked"], ["Y", "Offered every time"], ["R", "Compulsory"]])}
+            {sel("ATT_DEVICE_CHECK", "Laptops / phones", "Registered only = a person checks in from a laptop the admin approved (their first one registers itself).", [["N", "Any device"], ["Y", "Registered devices only"]])}
             {sel("DIGEST_ENABLED", "Morning summary", "Each person gets their late and due steps by email / WhatsApp if connected.", [["N", "Off"], ["Y", "On, every morning"]])}
           </div>
           <p className="text-xs text-muted-foreground">Reminders: <b>{s.ATT_REMIND_CHECKIN}</b> “you have not checked in” · <b>{s.ATT_REMIND_CHECKOUT}</b> “still checked in”. The check-in screen starts at <b>{s.ATT_GATE_FROM}</b>. Change times in <Link href="/flows/settings" className="text-primary underline">Settings</Link>.</p>

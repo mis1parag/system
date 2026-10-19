@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AwardIcon, BellIcon, BellRingIcon, WrenchIcon, CalendarCheck2Icon, CalendarDaysIcon, NotebookPenIcon, UsersRoundIcon, CalendarOffIcon, CheckCheckIcon, ClipboardCheckIcon, GaugeIcon, HelpCircleIcon, HistoryIcon, InboxIcon, LayoutDashboardIcon,
-  KeyRoundIcon, ListChecksIcon, LockIcon, LogOutIcon, MenuIcon, ScanFaceIcon, SearchIcon, SettingsIcon, ShieldCheckIcon, SlidersHorizontalIcon, TrophyIcon, UserCogIcon, UsersIcon, WorkflowIcon, ZapIcon, type LucideIcon,
+  KeyRoundIcon, LaptopIcon, ListChecksIcon, LockIcon, LogOutIcon, MenuIcon, ScanFaceIcon, SearchIcon, SettingsIcon, ShieldCheckIcon, SlidersHorizontalIcon, TrophyIcon, UserCogIcon, UsersIcon, WorkflowIcon, ZapIcon, type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { CheckInGate, CheckOutNudge, DayChip } from "@/components/attendance/checkin";
@@ -25,7 +25,7 @@ function requirement(path: string): [ModuleId, Action] | "super" | null {
   const p = path.replace(/\/$/, "");
   const exact: Record<string, [ModuleId, Action] | "super"> = {
     "/flows/tasks": ["fms", "view"], "/flows/search": ["fms", "view"], "/flows/new": ["fms", "configure"], "/flows": ["fms", "view"],
-    "/flows/checklist": ["checklist", "view"], "/flows/attendance": ["attendance", "view"], "/flows/team": ["attendance", "view"], "/flows/kiosk": ["attendance", "view"],
+    "/flows/checklist": ["checklist", "view"], "/flows/attendance": ["attendance", "view"], "/flows/team": ["attendance", "view"], "/flows/kiosk": ["attendance", "view"], "/flows/devices": ["attendance", "configure"],
     "/flows/scorecard": ["scorecard", "view"], "/flows/insights": ["reports", "view"], "/flows/vault": ["vault", "view"], "/flows/quick": ["quick_access", "view"],
     "/flows/users": ["employees", "view"], "/flows/holidays": ["attendance", "view"], "/flows/myteam": ["attendance", "view"], "/flows/reminders": ["reminders", "view"], "/flows/audit": ["audit", "view"], "/flows/settings": "super", "/flows/access": "super", "/flows/admin": "super", "/flows/console": "super",
   };
@@ -69,6 +69,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/flows/myteam", label: "My team", short: "Team", hint: "Attendance, work and leave of the people who report to you", icon: UsersRoundIcon, module: "attendance", reach: true },
       { href: "/flows/reminders", label: "Reminders", short: "Reminders", hint: "Reminders sent to you — and, for managers, to your team", icon: BellRingIcon, module: "reminders" },
+      { href: "/flows/devices", label: "Laptops & camera", short: "Laptops", hint: "Which laptops people check in from, the camera rule, who is excused", icon: LaptopIcon, module: "attendance", action: "configure" },
       { href: "/flows/users", label: "Team & profiles", short: "Team", hint: "People, departments, who reports to whom, photos and details", icon: UsersIcon, module: "employees", reach: true },
       { href: "/flows/holidays", label: "Holidays", short: "Holidays", hint: "Company holidays, year by year", icon: CalendarDaysIcon, module: "attendance" },
       { href: "/flows/team", label: "Absence cover", short: "Absence", hint: "Cover for someone who is away", icon: CalendarOffIcon, module: "attendance" },
@@ -118,9 +119,9 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
   const groups = useMemo(() => {
     const hasFlow = role === "SUPER_ADMIN" || (data?.flows ?? []).length > 0; // an FMS tab for somebody who has been given no FMS would only lead to an empty page
     const has = (m: ModuleId) => !!data?.perms?.[m]?.a.includes("view");
-    const allowed = (n: NavItem) => (n.href !== "/flows/approvals" || (has("fms") && hasFlow) || has("checklist")) && (!(n.module === "fms" && n.href !== "/flows/search") || hasFlow) && (!n.module || !!data?.perms?.[n.module]?.a.includes(n.action ?? "view")) && (!n.reach || (data?.reach?.[n.module!]?.all ?? false) || (data?.reach?.[n.module!]?.ids.length ?? 0) > 1) && (!n.super || role === "SUPER_ADMIN");
+    const allowed = (n: NavItem) => (n.href !== "/flows/kiosk" || !!data?.perms?.attendance?.a.includes("manage") || data?.settings?.ATT_SELF_PUNCH === "N") && (n.href !== "/flows/approvals" || (has("fms") && hasFlow) || has("checklist")) && (!(n.module === "fms" && n.href !== "/flows/search") || hasFlow) && (!n.module || !!data?.perms?.[n.module]?.a.includes(n.action ?? "view")) && (!n.reach || (data?.reach?.[n.module!]?.all ?? false) || (data?.reach?.[n.module!]?.ids.length ?? 0) > 1) && (!n.super || role === "SUPER_ADMIN");
     return GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
-  }, [role, data?.perms, data?.reach, data?.flows]);
+  }, [role, data?.perms, data?.reach, data?.flows, data?.settings?.ATT_SELF_PUNCH]);
   const flat = useMemo(() => [...groups.flatMap((g) => g.items), ...FOOT], [groups]);
   const pendingApprovals = (data?.requests ?? []).filter((r) => r.status === "Pending").length;
   const unread = data?.unread ?? 0;

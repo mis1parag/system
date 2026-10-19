@@ -6,6 +6,7 @@ import { allows, reachOf, scopeOfGrant } from "../../lib/permissions.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { checklistCalendar } from "./checklist.ts";
 import { Ctx } from "./ctx.ts";
+import { guardPunch } from "./devices.ts";
 import { isDate, isTime, minutesBetween, normDT } from "./time.ts";
 
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
@@ -51,12 +52,18 @@ async function punchOut(ctx: Ctx, userId: string, d: Record<string, unknown>) {
 
 export async function checkIn(ctx: Ctx, d: Record<string, unknown>) {
   selfPunchAllowed(ctx);
-  return pub("Attendance", await punchIn(ctx, ctx.actorId, d, "app"));
+  const device = await guardPunch(ctx, d); // registered laptop + compulsory camera, checked on the server
+  const rec = await punchIn(ctx, ctx.actorId, d, "app");
+  rec.inDevice = device;
+  return pub("Attendance", rec);
 }
 
 export async function checkOut(ctx: Ctx, d: Record<string, unknown>) {
   selfPunchAllowed(ctx);
-  return pub("Attendance", await punchOut(ctx, ctx.actorId, d));
+  const device = await guardPunch(ctx, d);
+  const rec = await punchOut(ctx, ctx.actorId, d);
+  rec.outDevice = device;
+  return pub("Attendance", rec);
 }
 
 /** "I forgot to check out": a person closes their own punch from an earlier day by giving the time they left. Kept in the audit log; a manager can still correct it. */

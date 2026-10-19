@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { CameraView, getPosition, useCamera } from "@/components/attendance/camera";
 import { Spinner } from "@/components/common";
 import { fmtHours } from "@/lib/attendance";
+import { deviceToken } from "@/lib/device";
 import { minutesBetween } from "@/lib/dates";
 import { useFlows } from "@/lib/flow-store";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,8 @@ export function usePunch() {
   const liveMin = closedMin + (open ? Math.max(0, minutesBetween(open.checkIn, n)) : 0);
   const state: "in" | "done" | "out" = open ? "in" : mine.length ? "done" : "out";
   const kioskOnly = data?.settings?.ATT_SELF_PUNCH === "N" && !allow("attendance", "manage");
-  const photoByDefault = data?.settings?.ATT_PHOTO === "Y";
+  const cameraRequired = !!data?.attRules?.cameraRequired;
+  const photoByDefault = data?.settings?.ATT_PHOTO === "Y" || cameraRequired;
 
   /** `photo` is optional: a punch never needs one. */
   async function punch(photo = "") {
@@ -37,7 +39,7 @@ export function usePunch() {
     setBusy(true);
     try {
       const pos = await getPosition();
-      const r = await call(state === "in" ? "checkOut" : "checkIn", { ...pos, photo });
+      const r = await call(state === "in" ? "checkOut" : "checkIn", { ...pos, photo, deviceToken: deviceToken() });
       if (!r.ok) {
         toast.error(r.code === "NETWORK" ? "No connection — your punch may not have been saved. Checking…" : r.error || "Could not save");
         await refresh(); // the screen may be out of date (another device, a slow connection): show what the server really has
@@ -50,7 +52,7 @@ export function usePunch() {
       setBusy(false);
     }
   }
-  return { mine, open, closedMin, liveMin, state, busy, punch, kioskOnly, photoByDefault };
+  return { mine, open, closedMin, liveMin, state, busy, punch, kioskOnly, photoByDefault, cameraRequired };
 }
 
 /** Compact Check in / Check out strip with today's status and a live "worked so far" timer (used on Home). */
@@ -79,14 +81,14 @@ export function PunchCard({ compact }: { compact?: boolean }) {
           {p.busy ? <Spinner /> : state === "in" ? <><LogOutIcon /> Check out</> : <><LogInIcon /> {state === "done" ? "Check in again" : "Check in"}</>}
         </Button>
       )}
-      {snapOpen && <SelfieDialog title={state === "in" ? "Check out" : "Check in"} busy={p.busy} onCancel={() => setSnapOpen(false)} onTake={async (photo) => { if (await p.punch(photo)) setSnapOpen(false); }} />}
+      {snapOpen && <SelfieDialog required={p.cameraRequired} title={state === "in" ? "Check out" : "Check in"} busy={p.busy} onCancel={() => setSnapOpen(false)} onTake={async (photo) => { if (await p.punch(photo)) setSnapOpen(false); }} />}
       {allow("attendance", "manage") && state === "out" && data?.settings?.ATT_SELF_PUNCH === "N" && <Link href="/flows/kiosk" className="text-xs text-primary underline">Open kiosk</Link>}
     </div>
   );
 }
 
 /** Camera preview, then one tap: takes the selfie and punches. A photo is a bonus, never a gate: "without photo" is always there. */
-function SelfieDialog({ title, busy, onCancel, onTake }: { title: string; busy: boolean; onCancel: () => void; onTake: (photo: string) => void }) {
+function SelfieDialog({ title, busy, required, onCancel, onTake }: { title: string; busy: boolean; required?: boolean; onCancel: () => void; onTake: (photo: string) => void }) {
   const cam = useCamera();
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onCancel()}>
@@ -95,7 +97,7 @@ function SelfieDialog({ title, busy, onCancel, onTake }: { title: string; busy: 
         <CameraView videoRef={cam.videoRef} state={cam.state} className="aspect-[4/3] w-full" />
         <DialogFooter className="flex-wrap">
           <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
-          <Button variant="outline" onClick={() => onTake("")} disabled={busy}>{title} without photo</Button>
+          {!required && <Button variant="outline" onClick={() => onTake("")} disabled={busy}>{title} without photo</Button>}
           <Button onClick={() => onTake(cam.snap())} disabled={busy || cam.state !== "ready"}>{busy ? <Spinner /> : `Take photo & ${title.toLowerCase()}`}</Button>
         </DialogFooter>
       </DialogContent>

@@ -1,5 +1,6 @@
 /** Reads for the browser, plus small account / settings writes. */
 import { addDays } from "./time.ts";
+import { rulesOf } from "./devices.ts";
 import { Ctx } from "./ctx.ts";
 import { fail, forbid, pub, require_, type Rec } from "../sheets/db.ts";
 import { DEFAULT_SETTINGS } from "../sheets/schema.ts";
@@ -131,6 +132,7 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
     can: capsOf(ctx.perms),
     reach: Object.fromEntries(Object.entries(reach).map(([m, r]) => [m, { all: r.all, ids: r.all ? [] : [...r.ids] }])),
     quickLinks, savedFilters, roles, access, departments,
+    attRules: await rulesOf(ctx, ctx.actorId),
   };
 }
 
@@ -236,7 +238,9 @@ export async function saveSettings(ctx: Ctx, d: Record<string, unknown>) {
     if (k === "ATT_GATE") require_(["required", "prompt", "off"].includes(v), "ATT_GATE must be required, prompt or off");
     if (["ATT_GATE_FROM", "ATT_REMIND_CHECKIN", "ATT_REMIND_CHECKOUT"].includes(k)) require_(/^([01]\d|2[0-3]):[0-5]\d$/.test(v), `${k} must be a time like 09:45`);
     if (k === "PAY_LATE_MARKS") require_(/^\d{1,2}$/.test(v), "PAY_LATE_MARKS must be a whole number (0 = off)");
-    if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "ATT_PHOTO" || k === "LEAVE_BLOCK_OVERDRAW" || k === "PAY_EMAIL_SLIPS" || k === "PAY_EMAIL_ATTACH") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
+    if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "LEAVE_BLOCK_OVERDRAW" || k === "PAY_EMAIL_SLIPS" || k === "PAY_EMAIL_ATTACH") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
+    if (k === "ATT_DEVICE_CHECK") require_(["Y", "N"].includes(v), "ATT_DEVICE_CHECK must be Y or N");
+    if (k === "ATT_PHOTO") require_(["N", "Y", "R"].includes(v), "ATT_PHOTO must be N, Y or R");
     if (k === "TIMEZONE") { try { new Intl.DateTimeFormat("en", { timeZone: v }); } catch { fail("VALIDATION", "Unknown timezone (example: Asia/Kolkata)"); } }
     const row = rows.find((r) => r.key === k);
     if (!row) { ctx.tx.insert("Settings", { key: k, value: v, description: known.get(k)!.desc, group: "General" }); ctx.tx.audit("Setting changed", "Settings", k, { value: known.get(k)!.v }, { value: v }); }

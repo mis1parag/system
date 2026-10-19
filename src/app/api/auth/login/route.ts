@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { login } from "@/server/domain/auth";
 import { MidapError } from "@/server/sheets/db";
 import { getDb } from "@/server/runtime";
+import { googleConfigFromEnv } from "@/lib/google-oauth";
 import { setSession } from "@/lib/server/session";
 import { requestMeta } from "@/lib/server/meta";
 import type { Role } from "@/lib/types";
@@ -11,7 +12,7 @@ export const maxDuration = 30;
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   try {
-    const u = await login(getDb(), String(body.identifier ?? ""), String(body.pin ?? ""), requestMeta(req));
+    const u = await login(getDb(), String(body.identifier ?? ""), String(body.pin ?? ""), requestMeta(req), { googleOnly: googleConfigFromEnv() !== null });
     await setSession({ userId: u.userId, role: u.role as Role, name: u.name });
     return NextResponse.json({ ok: true, user: u });
   } catch (e) {

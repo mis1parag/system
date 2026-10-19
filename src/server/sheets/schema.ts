@@ -127,8 +127,22 @@ export const TABLES: Record<string, TableDef> = {
       ["attId", "Attendance ID", "s"], ["userId", "User", "s"], ["date", "Date", "s"], ["checkIn", "Check In", "s"], ["checkOut", "Check Out", "s"],
       ["lat", "Latitude", "nn"], ["lng", "Longitude", "nn"], ["outLat", "Check-out Latitude", "nn"], ["outLng", "Check-out Longitude", "nn"],
       ["note", "Note", "s"], ["source", "Source", "s"], ["createdBy", "Created By", "s"], ["createdAt", "Created", "s"], ["deleted", "Deleted", "s"],
-      ["inPhoto", "Check-in Photo ID", "s"], ["outPhoto", "Check-out Photo ID", "s"],
+      ["inPhoto", "Check-in Photo ID", "s"], ["outPhoto", "Check-out Photo ID", "s"], ["inDevice", "Check-in laptop / phone (Devices ID)", "s"], ["outDevice", "Check-out laptop / phone (Devices ID)", "s"],
     ],
+  },
+  /** The laptops / phones people check in from. A device is known by a random token kept in that browser (only its hash is stored here). Approved = may be used for check-in. */
+  Devices: {
+    name: "Devices", idKey: "deviceId", prefix: "DEV",
+    cols: [
+      ["deviceId", "Device ID", "s"], ["userId", "Owner", "s"], ["tokenHash", "Token hash", "s"], ["label", "Name (browser · system)", "s"],
+      ["status", "Status (Approved / Pending / Blocked)", "s"], ["via", "How it was added (first use / request / admin)", "s"], ["createdAt", "First seen", "s"],
+      ["decidedBy", "Decided by", "s"], ["decidedAt", "Decided", "s"], ["lastUsedAt", "Last used", "s"], ["lastIp", "Last IP", "s"],
+    ],
+  },
+  /** People who are excused from the laptop rule and / or the compulsory camera. Everybody else follows the rules. */
+  Att_Exempt: {
+    name: "Att_Exempt", idKey: "userId", prefix: "AEX",
+    cols: [["userId", "Person", "s"], ["device", "Any laptop is fine (Y)", "s"], ["camera", "Camera not needed (Y)", "s"], ["reason", "Reason", "s"], ["by", "Set by", "s"], ["at", "Set", "s"]],
   },
   /** Small selfie taken with a punch. Kept out of the page data; fetched one at a time. */
   Attendance_Photos: {
@@ -240,7 +254,7 @@ export const TABLES: Record<string, TableDef> = {
   },
 };
 
-export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Salary_Structure", "Pay_Waivers", "Slip_Requests", "Notes", "Reminders", "Announcements", "Mail_Log", "Settings", "Audit_Log"];
+export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Salary_Structure", "Pay_Waivers", "Slip_Requests", "Notes", "Reminders", "Announcements", "Mail_Log", "Devices", "Att_Exempt", "Settings", "Audit_Log"];
 
 /** [key, default, description] */
 export const DEFAULT_SETTINGS: [string, string, string][] = [
@@ -268,5 +282,6 @@ export const DEFAULT_SETTINGS: [string, string, string][] = [
   ["ATT_REMIND_CHECKIN", "09:45", "Attendance: people who have not checked in by this time get a reminder"],
   ["ATT_REMIND_CHECKOUT", "18:30", "Attendance: people still checked in after this time get a reminder to check out"],
   ["PERMISSIONS", "{}", "Edited templates of the built-in roles (set on the Access & roles page)"],
-  ["ATT_PHOTO", "N", "Attendance: Y = take a small selfie with every check-in / out (when a camera is available)"],
+  ["ATT_PHOTO", "N", "Attendance: N = no photo, Y = a selfie is offered, R = a camera photo is COMPULSORY with every check-in / out (except people excused under Devices & camera)"],
+  ["ATT_DEVICE_CHECK", "N", "Attendance: Y = people can check in only from a registered (approved) laptop / phone; their first device registers itself, others wait for approval (except people excused under Devices & camera)"],
 ];

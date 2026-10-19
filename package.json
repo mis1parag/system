@@ -20,9 +20,10 @@
     "test:attendance": "node --no-warnings tools/test-attendance.mjs",
     "test:access": "node --no-warnings tools/test-access.mjs",
     "import:checklist": "node --no-warnings --env-file=.env.local tools/checklist-xlsx.mjs",
-    "test": "node --no-warnings tools/test-flow.mjs && node --no-warnings tools/test-features.mjs && node --no-warnings tools/test-templates.mjs && node --no-warnings tools/test-checklist.mjs && node --no-warnings tools/test-attendance.mjs && node --no-warnings tools/test-access.mjs && node --no-warnings tools/test-hr.mjs && node --no-warnings tools/test-google.mjs",
+    "test": "node --no-warnings tools/test-flow.mjs && node --no-warnings tools/test-features.mjs && node --no-warnings tools/test-templates.mjs && node --no-warnings tools/test-checklist.mjs && node --no-warnings tools/test-attendance.mjs && node --no-warnings tools/test-access.mjs && node --no-warnings tools/test-hr.mjs && node --no-warnings tools/test-google.mjs && node --no-warnings tools/test-devices.mjs",
     "test:hr": "node --no-warnings tools/test-hr.mjs",
     "test:google": "node --no-warnings tools/test-google.mjs",
+    "test:devices": "node --no-warnings tools/test-devices.mjs",
     "local": "node --no-warnings tools/start-local.mjs",
     "local:live": "node --no-warnings tools/start-local.mjs --live"
   },

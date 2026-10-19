@@ -1,5 +1,6 @@
 /** Login, PIN handling and the team (users). */
 import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
+import { googleConfigFromEnv } from "../../lib/google-oauth.ts";
 import { Db, fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx, loadSettings } from "./ctx.ts";
 import { addMinutes, clockNow } from "./time.ts";
@@ -23,7 +24,7 @@ export function checkPin(pin: string, stored: string): boolean {
 export interface LoginUser { userId: string; name: string; role: string }
 
 /** Verify credentials. Five wrong PINs lock the account for 15 minutes (counter lives in the sheet, so it holds across servers). */
-export async function login(db: Db, identifier: string, pin: string, meta: { ip?: string; device?: string } = {}): Promise<LoginUser> {
+export async function login(db: Db, identifier: string, pin: string, meta: { ip?: string; device?: string } = {}, opts: { googleOnly?: boolean } = {}): Promise<LoginUser> {
   const id = str(identifier).toLowerCase();
   require_(id && str(pin), "Enter your mobile / email / user ID and PIN");
   const settings = await loadSettings(db);
@@ -36,6 +37,8 @@ export async function login(db: Db, identifier: string, pin: string, meta: { ip?
   const user = users.find((u) => String(u.userId).toLowerCase() === id || (u.email && String(u.email).toLowerCase() === id) || (d.length === 10 && digits10(u.mobile) === d));
   if (!user || user.status !== "Active") fail("AUTH", "Wrong ID or PIN");
   const u = user as Rec;
+  // with Google sign-in switched on, a PIN opens the app only for the Super Admin (the way back in if Google is ever down); everyone else uses Google
+  if (opts.googleOnly && u.role !== "SUPER_ADMIN") { tx.audit("PIN login refused (Google sign-in is required)", "Users", String(u.userId)); await tx.commit(); fail("AUTH", "Please sign in with Google. PIN sign-in is only for the Super Admin."); }
   if (u.lockedUntil && String(u.lockedUntil) > clock.dt) fail("LOCKED", "Too many wrong attempts. Try again in a few minutes.");
   if (!checkPin(str(pin), String(u.pinHash))) {
     u.failCount = Number(u.failCount) + 1;
@@ -121,7 +124,10 @@ export async function saveUser(ctx: Ctx, rec: Record<string, unknown>) {
   require_(!clash, `Another user already uses this mobile / email (${clash?.userId})`);
   const pin = str(rec.pin);
   if (pin) require_(/^\d{4,8}$/.test(pin), "PIN must be 4-8 digits");
-  if (!existing) require_(pin, "Set a PIN for the new user");
+  // when Google sign-in is on, a new person needs no PIN — they sign in with the Google account of the e-mail given here
+  const googleOn = googleConfigFromEnv() !== null;
+  if (!existing) require_(pin || googleOn, "Set a PIN for the new user");
+  if (googleOn && !existing && role !== "SUPER_ADMIN") require_(/^\S+@\S+\.\S+$/.test(email), "Enter the person's Google e-mail address — it is how they sign in");
   if (existing && existing.role === "SUPER_ADMIN" && (role !== "SUPER_ADMIN" || status !== "Active")) {
     require_(users.some((x) => x !== existing && x.role === "SUPER_ADMIN" && x.status === "Active"), "There must be at least one active Super Admin");
   }
@@ -131,7 +137,7 @@ export async function saveUser(ctx: Ctx, rec: Record<string, unknown>) {
 
   if (!existing) {
     const u = ctx.tx.insert("Users", {
-      userId: newId("USR"), name, role, mobile, email, status, managerId: manager, notify, pinHash: hashPin(pin), failCount: 0, lockedUntil: "", createdAt: ctx.clock.stamp, department, empCode, leaveAllot,
+      userId: newId("USR"), name, role, mobile, email, status, managerId: manager, notify, pinHash: hashPin(pin || randomBytes(12).toString("hex")), failCount: 0, lockedUntil: "", createdAt: ctx.clock.stamp, department, empCode, leaveAllot,
     });
     ctx.tx.audit("User created", "Users", String(u.userId), null, { name, role });
     return pub("Users", u);

@@ -5,6 +5,7 @@ import { CalendarPlusIcon, CameraIcon, CameraOffIcon, CheckCircle2Icon, ClockIco
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CameraView, useCamera } from "@/components/attendance/camera";
+import { DeviceNotice } from "@/components/attendance/device-notice";
 import { LeaveDialog } from "@/components/attendance/attendance-dialogs";
 import { usePunch } from "@/components/attendance/punch-card";
 import { useAttendance } from "@/components/attendance/use-attendance";
@@ -21,8 +22,9 @@ export function MarkTab() {
   const { meId, today, now, holidayName } = useFlows();
   const att = useAttendance();
   const p = usePunch();
-  const [photoOn, setPhotoOn] = useState(false);
+  const [photoPick, setPhotoOn] = useState(false);
   const [asking, setAsking] = useState(false);
+  const photoOn = p.cameraRequired || photoPick;
   const cam = useCamera(photoOn);
   const n = now();
   // the clock on the card
@@ -57,17 +59,19 @@ export function MarkTab() {
               {(p.open?.lat ?? p.mine[0]?.lat) != null && <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"><MapPinIcon className="size-3" /> location saved</span>}
             </div>
 
+            <DeviceNotice />
             {p.kioskOnly ? (
               <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Check-in and check-out are done at the office kiosk (show or type your Employee ID there). Everything else on this page still works.</p><Link href="/flows/kiosk" className={cn(buttonVariants({ size: "lg" }), "h-11 w-fit text-base")}><LogInIcon /> Check in at the office kiosk</Link></div>
             ) : (
               <>
                 <div>
-                  <button type="button" onClick={() => setPhotoOn((v) => !v)} aria-pressed={photoOn} className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors", photoOn ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
-                    {photoOn ? <CameraIcon className="size-3.5" /> : <CameraOffIcon className="size-3.5" />} {photoOn ? "Photo on — tap to turn off" : p.photoByDefault ? "Add a photo (your office likes one — still optional)" : "Add a photo (optional)"}
+                  <button type="button" onClick={() => !p.cameraRequired && setPhotoOn((v) => !v)} aria-pressed={photoOn} className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors", photoOn ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
+                    {photoOn ? <CameraIcon className="size-3.5" /> : <CameraOffIcon className="size-3.5" />} {photoOn ? (p.cameraRequired ? "Camera photo is compulsory" : "Photo on — tap to turn off") : p.photoByDefault ? "Add a photo (your office likes one — still optional)" : "Add a photo (optional)"}
                   </button>
                   {photoOn && <CameraView videoRef={cam.videoRef} state={cam.state} className="mt-2 aspect-[4/3] w-full max-w-sm" />}
+                  {p.cameraRequired && cam.state === "unavailable" && <p role="alert" className="mt-2 text-xs text-red-700">The camera is compulsory but could not start. Allow the camera for this site in your browser, then reload. If your camera does not work, ask the Super Admin to excuse you.</p>}
                 </div>
-                <Button onClick={go} disabled={p.busy} size="lg" variant={p.state === "in" ? "outline" : "default"} className={cn("h-14 w-full max-w-sm text-base", p.state === "in" && "border-red-200 text-red-700 hover:bg-red-50")}>
+                <Button onClick={go} disabled={p.busy || (p.cameraRequired && !wantPhoto)} size="lg" variant={p.state === "in" ? "outline" : "default"} className={cn("h-14 w-full max-w-sm text-base", p.state === "in" && "border-red-200 text-red-700 hover:bg-red-50")}>
                   {p.busy ? <Spinner /> : p.state === "in" ? <><LogOutIcon /> Check out{wantPhoto ? " with photo" : ""}</> : <><LogInIcon /> {p.state === "done" ? "Check in again" : "Check in"}{wantPhoto ? " with photo" : ""}</>}
                 </Button>
               </>

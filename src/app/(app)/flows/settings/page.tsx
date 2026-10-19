@@ -66,8 +66,11 @@ export default function SettingsPage() {
             <Field label="Show it from"><Input type="time" value={v.ATT_GATE_FROM ?? ""} onChange={set("ATT_GATE_FROM")} /></Field>
             <Field label="Remind if not checked in by"><Input type="time" value={v.ATT_REMIND_CHECKIN ?? ""} onChange={set("ATT_REMIND_CHECKIN")} /></Field>
             <Field label="Remind to check out after" className="col-span-2"><Input type="time" value={v.ATT_REMIND_CHECKOUT ?? ""} onChange={set("ATT_REMIND_CHECKOUT")} /></Field>
-            <Field label="Photo with every punch" hint="Takes a small selfie when a camera is available. The kiosk always takes one.">
-              <NativeSelect value={v.ATT_PHOTO ?? "N"} onChange={set("ATT_PHOTO")}><option value="N">No</option><option value="Y">Yes</option></NativeSelect>
+            <Field label="Photo with every punch" hint="Compulsory means no check-in or check-out without a camera photo (the server refuses it).">
+              <NativeSelect value={v.ATT_PHOTO ?? "N"} onChange={set("ATT_PHOTO")}><option value="N">No</option><option value="Y">Offered every time</option><option value="R">Compulsory (camera photo, except excused people)</option></NativeSelect>
+            </Field>
+            <Field label="Registered laptops only" hint="Y: people check in only from a laptop / phone the admin has approved (their first one registers itself). Excuses and approvals: Laptops & camera page.">
+              <NativeSelect value={v.ATT_DEVICE_CHECK ?? "N"} onChange={set("ATT_DEVICE_CHECK")}><option value="N">Any laptop / phone</option><option value="Y">Registered laptops only</option></NativeSelect>
             </Field>
           </div>
         </Section>

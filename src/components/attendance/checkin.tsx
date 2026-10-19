@@ -62,7 +62,8 @@ export function CheckInPanel({ onDone, onPostpone, greeting }: { onDone?: () => 
   const { data, today, now } = useFlows();
   const p = usePunch();
   const st = useDayState();
-  const [photoOn, setPhotoOn] = useState(false);
+  const [photoPick, setPhotoOn] = useState(false);
+  const photoOn = p.cameraRequired || photoPick;
   const cam = useCamera(photoOn);
   const n = now();
   const hour = Number(n.slice(11, 13));
@@ -89,12 +90,13 @@ export function CheckInPanel({ onDone, onPostpone, greeting }: { onDone?: () => 
           : `Check in before ${st.lateAfter} to be on time. It takes one tap.`}
       </p>
       <div>
-        <button type="button" onClick={() => setPhotoOn((v) => !v)} aria-pressed={photoOn} className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors", photoOn ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
-          {photoOn ? <CameraIcon className="size-3.5" /> : <CameraOffIcon className="size-3.5" />} {photoOn ? "Photo on — tap to turn off" : "Add a photo (optional)"}
+        <button type="button" onClick={() => !p.cameraRequired && setPhotoOn((v) => !v)} aria-pressed={photoOn} className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors", photoOn ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
+          {photoOn ? <CameraIcon className="size-3.5" /> : <CameraOffIcon className="size-3.5" />} {photoOn ? (p.cameraRequired ? "Camera photo is compulsory" : "Photo on — tap to turn off") : "Add a photo (optional)"}
         </button>
         {photoOn && <CameraView videoRef={cam.videoRef} state={cam.state} className="mt-2 aspect-[4/3] w-full" />}
+        {p.cameraRequired && cam.state === "unavailable" && <p role="alert" className="mt-2 text-xs text-red-700">The camera is compulsory but could not start. Allow the camera for this site in your browser, then reload. If your camera does not work, ask the Super Admin to excuse you.</p>}
       </div>
-      <Button onClick={go} disabled={p.busy} size="lg" variant={out ? "outline" : "default"} className={cn("h-14 w-full text-base", out && "border-red-200 text-red-700 hover:bg-red-50")}>
+      <Button onClick={go} disabled={p.busy || (p.cameraRequired && !wantPhoto)} size="lg" variant={out ? "outline" : "default"} className={cn("h-14 w-full text-base", out && "border-red-200 text-red-700 hover:bg-red-50")}>
         {p.busy ? <Spinner /> : out ? <><LogOutIcon /> Check out now</> : <><LogInIcon /> Check in now</>}
       </Button>
       {!out && (

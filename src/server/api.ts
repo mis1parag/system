@@ -31,6 +31,7 @@ import { auditLog, getFlowData, getItemDetail, logExport, markNotificationsRead,
 import { cancelLeave, checkIn, checkOut, decideLeave, deleteAttendance, getPunchPhoto, importAttendance, importLeaves, kioskPunch, closeMyPunch, markAttendance, requestLeave } from "./domain/attendance.ts";
 import { bulkAddChecklistTasks, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
 import { deliver, deliveryFromEnv, type DeliveryConfig } from "./domain/notify.ts";
+import { decideDevice, listDevices, myDevices, registerDevice, saveAttExempt } from "./domain/devices.ts";
 import { listMailLog, processMailQueue, resendSlipMail, retryMails } from "./domain/mail-log.ts";
 
 export interface ApiResult<T = unknown> {
@@ -143,6 +144,11 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     assignVault: { roles: ALL, perm: ["vault", "view"], fn: assignVault },
     // salary slips (each person sees only their own; payroll people prepare and publish)
     listSlips: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listSlips },
+    myDevices: { roles: ALL, read: true, fn: myDevices },
+    registerDevice: { roles: ALL, fn: registerDevice },
+    listDevices: { roles: ALL, read: true, fn: listDevices },
+    decideDevice: { roles: ALL, fn: decideDevice },
+    saveAttExempt: { roles: ALL, fn: saveAttExempt },
     listMailLog: { roles: ALL, read: true, fn: listMailLog },
     retryMails: { roles: ALL, perm: ["payroll", "approve"], fn: retryMails },
     resendSlipMail: { roles: ALL, perm: ["payroll", "approve"], fn: resendSlipMail },

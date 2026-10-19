@@ -112,6 +112,8 @@ export interface FlowBundle {
   checklistTasks: ChecklistTask[]; checklistLog: ChecklistEntry[];
   /** Attendance punches (everyone for admins, own for staff; last 120 days — the Super Admin gets all) and leave requests. */
   attendance: AttendanceRow[]; leaves: LeaveRow[];
+  /** What the signed-in person must do to check in: a camera photo, a registered laptop (unless excused). */
+  attRules?: { cameraRequired: boolean; deviceCheck: boolean };
   settings: Record<string, string>;
   /** What the signed-in person may do, module by module (Super Admin: everything). A module that is missing is not theirs. */
   perms: PermSet;

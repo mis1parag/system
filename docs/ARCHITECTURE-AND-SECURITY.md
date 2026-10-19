@@ -140,6 +140,14 @@ Only the Super Admin (server-checked; a person without the role gets FORBIDDEN e
 ### Attendance kiosk
 The kiosk page is in the menu for everyone (second item). People with the kiosk right (Super Admin and people who manage attendance — the reception PC) get the full kiosk (Employee ID / QR, photo). Everybody else sees "Check in at the office kiosk": their own Employee ID to show there, and today's punches. When the company rule is "Only at the office kiosk" (`ATT_SELF_PUNCH = N`), the check-in buttons everywhere read **Check in at the office kiosk** and lead there; check-in / check-out from a personal phone is refused by the server.
 
+### Laptops, camera and Google-only sign-in
+* **Direct check-in / check-out**: with `ATT_SELF_PUNCH=Y` everybody checks in and out from their own laptop / phone (the check-in screen after sign-in). The kiosk page and menu item stay only for people who manage attendance (reception). With `N` the kiosk-only behaviour of before applies.
+* **Registered laptops** (`ATT_DEVICE_CHECK=Y`): each browser holds a random token (localStorage); only its SHA-256 is stored in `Devices`. A person's first device registers itself, every further one is *Pending* until someone with attendance `configure` approves it (they are notified); *Blocked* devices are refused. Each punch stores the device id (`Attendance.inDevice / outDevice`). Checked on the server.
+* **Compulsory camera** (`ATT_PHOTO=R`): check-in and check-out are refused (code CAMERA) without a camera JPEG. The reception kiosk keeps its own rules.
+* **Excused people** (`Att_Exempt`, page *Laptops & camera*): per person "any laptop is fine" and / or "no camera needed", each with a written reason, all in the activity log. Everyone else follows the rules.
+* **Google-only**: when Google sign-in is configured, PIN sign-in works only for the Super Admin (the way back in if Google is down); everybody else is told to sign in with Google. New people then need no PIN but must have the Google e-mail.
+* `node tools/set-attendance-rules.mjs --apply` switches these settings on the live sheet.
+
 ### Sign in with Google
 * Optional. Needs `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` and an https `APP_URL` (redirect `<APP_URL>/api/auth/google/callback`). Without them the button is hidden and the routes answer "not set up". Secrets are environment variables only.
 * Authorization-code flow with PKCE, a random `state` and `nonce` kept in a signed 10-minute cookie (used once). The id_token comes straight from Google's token endpoint over TLS; issuer, audience, expiry, nonce and `email_verified` are checked.

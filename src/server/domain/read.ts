@@ -53,7 +53,9 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
     const c = (counts[String(i.flowId)] ??= { open: 0, completed: 0, cancelled: 0 });
     if (i.status === "Open") c.open++; else if (i.status === "Completed") c.completed++; else c.cancelled++;
   }
+  const offFlows = new Set(t.Flows.filter((f) => f.status === "Archived").map((f) => String(f.flowId)));
   const items = vis.items.filter((i) => {
+    if (offFlows.has(String(i.flowId)) && i.flowId !== flowId) return false; // switched-off FMS: nothing in anybody's task lists
     if (flowId && i.flowId !== flowId) return false;
     if (all) return true;
     return i.status === "Open" || String(i.completedAt || i.updatedAt).slice(0, 10) >= since;
@@ -68,7 +70,7 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
   const recentReq = (r: Rec) => r.status === "Pending" || String(r.decidedAt).slice(0, 10) >= addDays(ctx.clock.date, -14);
   // "more time" for checklist tasks: the person who asked, their reporting manager, the Super Admin and people who manage that person's checklist
   const reachClReq = (r: Rec) => r.requestedBy === ctx.actorId || userById.get(String(r.requestedBy))?.managerId === ctx.actorId || ctx.isSuper || (ctx.allow("checklist", "manage") && (reach.checklist.all || reach.checklist.ids.has(String(r.requestedBy))));
-  const requests = t.Requests.filter((r) => (r.kind === "checklist" ? reachClReq(r) : has("fms") && vis.flowOk.has(String(r.flowId)) && reachReq(r)) && recentReq(r));
+  const requests = t.Requests.filter((r) => (r.kind === "checklist" ? reachClReq(r) : has("fms") && vis.flowOk.has(String(r.flowId)) && !offFlows.has(String(r.flowId)) && reachReq(r)) && recentReq(r));
 
   // ---- notifications: only about modules the person can open
   const notes = t.Notifications.filter((n) => n.userId === ctx.actorId).filter((n) => { const m = moduleOfNotification(n as { link?: unknown; type?: unknown }); return !m || has(m); }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));

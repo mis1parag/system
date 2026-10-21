@@ -85,7 +85,7 @@ export function createSheetsClient(cfg: SheetsConfig): SheetsClient {
 
   async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
     let lastErr: unknown;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 6; attempt++) {
       try {
         const res = await fetch(url, {
           method,
@@ -104,7 +104,7 @@ export function createSheetsClient(cfg: SheetsConfig): SheetsClient {
       } catch (e) {
         if (e instanceof SheetsError && !e.retryable) throw e;
         lastErr = e;
-        await sleep(400 * 2 ** attempt + Math.random() * 200);
+        await sleep(700 * 2 ** attempt + Math.random() * 300); // quota windows are a minute long: wait up to ~25 s in total
       }
     }
     throw lastErr instanceof Error ? lastErr : new Error("Google Sheets request failed");

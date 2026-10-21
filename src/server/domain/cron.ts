@@ -30,7 +30,7 @@ export async function tick(ctx: Ctx): Promise<TickResult> {
   const userById = new Map(users.map((u) => [String(u.userId), u]));
   const admins = users.filter((u) => u.status === "Active" && (u.role === "ADMIN" || u.role === "SUPER_ADMIN")).map((u) => String(u.userId));
   const flows = new Map((await tx.rows("Flows")).map((f) => [String(f.flowId), parseFlow({ ...f } as unknown as FlowRec)]));
-  const openItems = new Map((await tx.rows("Flow_Items")).filter((i) => i.status === "Open").map((i) => [String(i.itemId), i]));
+  const openItems = new Map((await tx.rows("Flow_Items")).filter((i) => i.status === "Open" && !flows.get(String(i.flowId))?.archived).map((i) => [String(i.itemId), i]));
 
   for (const t of await tx.rows("Flow_Tasks")) {
     if (t.status !== "Pending" || !t.planned) continue;

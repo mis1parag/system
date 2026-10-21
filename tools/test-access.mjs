@@ -6,7 +6,7 @@ import { createFakeSheets } from "./fake-sheets/server.mjs";
 import { createSheetsClient } from "../src/server/sheets/client.ts";
 import { Db } from "../src/server/sheets/db.ts";
 import { runAction } from "../src/server/api.ts";
-import { runSetup } from "../src/server/domain/system.ts";
+import { runSetup, runTick } from "../src/server/domain/system.ts";
 import { makeCtx } from "../src/server/domain/ctx.ts";
 import { allows, effectivePermSet, reachOf, roleTemplate, parsePermSet, MODULES } from "../src/lib/permissions.ts";
 
@@ -191,7 +191,40 @@ ok(!(await bundle(KUNAL)).flows.some((f) => f.flowId === flowId) && (await bundl
 ok((await call(boss, "setFlowAccess", { flowId, departments: [], allowedUsers: [KUNAL] }, MON)).ok && (await bundle(KUNAL)).flows.some((f) => f.flowId === flowId) && !(await bundle(ASHA)).flows.some((f) => f.flowId === flowId), "…or to named people");
 await call(boss, "setFlowAccess", { flowId, departments: [], allowedUsers: [], status: "Archived" }, MON);
 ok(!(await bundle(PRIYA)).flows.some((f) => f.flowId === flowId) && (await bundle(boss)).flows.some((f) => f.flowId === flowId), "switched off: invisible to everyone but the Super Admin");
+const kBefore = (await bundle(KUNAL)).items.filter((i) => i.flowId === flowId).length;
+ok(kBefore === 0 && (await bundle(KUNAL)).tasks.every((t) => t.flowId !== flowId), "switched off: its entries and steps are not in anybody's task lists (Kunal had some)");
+ok((await bundle(boss)).items.every((i) => i.flowId !== flowId) && (await bundle(boss)).tasks.every((t) => t.flowId !== flowId), "…not even in the Super Admin's own lists");
+ok((await call(boss, "getFlowData", { flowId }, MON)).data.items.some((i) => i.flowId === flowId), "…but the Super Admin sees them when opening that FMS");
+const offTick = await runTick(db, undefined, new Date(`${MON}T09:30:00+05:30`));
+ok((offTick.reminders ?? 0) === 0 && (offTick.overdue ?? 0) === 0, "a switched-off FMS sends no reminders or overdue alerts");
+
 await call(boss, "setFlowAccess", { flowId, status: "Active" }, MON);
+
+section("Super Admin removes FMS entries and checklist tasks in bulk");
+const open0 = (await bundle(KUNAL)).items.filter((i) => i.flowId === flowId && i.status === "Open").length;
+ok(open0 > 0, "(fixture) Kunal has open entries");
+ok(denied(await call(PRIYA, "removeFlowEntries", { flowId, scope: "open", confirm: "REMOVE" }, MON)) && denied(await call(KUNAL, "removeChecklistTasks", { confirm: "REMOVE" }, MON)) && denied(await call(PRIYA, "previewRemoval", { kind: "fms", flowId }, MON)), "only the Super Admin can remove in bulk");
+ok(!(await call(boss, "removeFlowEntries", { flowId, scope: "open" }, MON)).ok && !(await call(boss, "removeFlowEntries", { flowId, scope: "open", confirm: "yes" }, MON)).ok, "it needs the word REMOVE");
+ok(!(await call(boss, "removeFlowEntries", { flowId: "FLW-NOPE", scope: "open", confirm: "REMOVE" }, MON)).ok && !(await call(boss, "removeFlowEntries", { flowId, scope: "all-of-it", confirm: "REMOVE" }, MON)).ok, "a wrong FMS or scope is refused");
+const pvFms = await call(boss, "previewRemoval", { kind: "fms", flowId }, MON);
+ok(pvFms.ok && pvFms.data.open === open0, `the preview tells how many: ${pvFms.data?.open}`);
+const rmFms = await call(boss, "removeFlowEntries", { flowId, scope: "open", reason: "test", confirm: "REMOVE" }, MON);
+ok(rmFms.ok && rmFms.data.removed === open0 && (await bundle(KUNAL)).items.filter((i) => i.flowId === flowId && i.status === "Open").length === 0, "open entries are removed from Kunal's lists");
+const backFms = await call(boss, "restoreFlowEntries", { flowId }, MON);
+ok(backFms.ok && backFms.data.restored >= open0 && (await bundle(KUNAL)).items.filter((i) => i.flowId === flowId && i.status === "Open").length === open0, "…and can be brought back");
+
+await call(boss, "saveChecklistTask", { title: "Post on Instagram", doerId: KUNAL, freq: "D", startDate: MON, department: "PC" }, MON);
+await call(boss, "saveChecklistTask", { title: "Daily stock check", doerId: NIDHI, freq: "D", startDate: MON, department: "PC" }, MON);
+const clAll = await call(boss, "previewRemoval", { kind: "checklist" }, MON);
+const clKunal = await call(boss, "previewRemoval", { kind: "checklist", doerId: KUNAL }, MON);
+ok(clAll.ok && clKunal.ok && clKunal.data.tasks > 0 && clKunal.data.tasks <= clAll.data.tasks, `checklist preview: everybody ${clAll.data?.tasks}, Kunal ${clKunal.data?.tasks}`);
+ok(!(await call(boss, "removeChecklistTasks", { doerId: KUNAL }, MON)).ok, "checklist removal needs REMOVE too");
+const clKunalBefore = (await bundle(KUNAL)).checklistTasks.filter((c) => c.doerId === KUNAL).length;
+const clRm = await call(boss, "removeChecklistTasks", { doerId: KUNAL, reason: "test", confirm: "REMOVE" }, MON);
+const clKunalAfter = (await bundle(KUNAL)).checklistTasks.filter((c) => c.doerId === KUNAL).length;
+ok(clRm.ok && clRm.data.tasks === clKunal.data.tasks && clKunalBefore > 0 && clKunalAfter === 0, `Kunal's checklist tasks are gone from his list (${clKunalBefore} → ${clKunalAfter})`);
+ok((await bundle(KUNAL)).checklistLog.every((l) => !(l.doerId === KUNAL && l.status === "Pending")), "…and his unfinished entries too");
+
 
 section("moving work and leave");
 const cl = await call(boss, "saveChecklistTask", { title: "Ops daily", doerId: KUNAL, freq: "D", startDate: MON, proof: "N" }, MON);

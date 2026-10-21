@@ -31,6 +31,7 @@ import { auditLog, getFlowData, getItemDetail, logExport, markNotificationsRead,
 import { cancelLeave, checkIn, checkOut, decideLeave, deleteAttendance, getPunchPhoto, importAttendance, importLeaves, kioskPunch, closeMyPunch, markAttendance, requestLeave } from "./domain/attendance.ts";
 import { bulkAddChecklistTasks, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
 import { deliver, deliveryFromEnv, type DeliveryConfig } from "./domain/notify.ts";
+import { previewRemoval, removeChecklistTasks, removeFlowEntries, restoreFlowEntries } from "./domain/bulk-remove.ts";
 import { decideDevice, listDevices, myDevices, registerDevice, saveAttExempt } from "./domain/devices.ts";
 import { listMailLog, processMailQueue, resendSlipMail, retryMails } from "./domain/mail-log.ts";
 
@@ -144,6 +145,10 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     assignVault: { roles: ALL, perm: ["vault", "view"], fn: assignVault },
     // salary slips (each person sees only their own; payroll people prepare and publish)
     listSlips: { roles: ALL, read: true, perm: ["payroll", "view"], fn: listSlips },
+    previewRemoval: { roles: SUPER, read: true, fn: previewRemoval },
+    removeFlowEntries: { roles: SUPER, fn: removeFlowEntries },
+    restoreFlowEntries: { roles: SUPER, fn: restoreFlowEntries },
+    removeChecklistTasks: { roles: SUPER, fn: removeChecklistTasks },
     myDevices: { roles: ALL, read: true, fn: myDevices },
     registerDevice: { roles: ALL, fn: registerDevice },
     listDevices: { roles: ALL, read: true, fn: listDevices },

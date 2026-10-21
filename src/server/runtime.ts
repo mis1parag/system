@@ -7,7 +7,7 @@ const g = globalThis as unknown as { __midapDb?: Db };
 /** One Db per server instance (it caches reads for a few seconds, so repeated page loads cost one Google call). */
 export function getDb(): Db {
   if (!g.__midapDb) {
-    g.__midapDb = new Db(createSheetsClient(configFromEnv()), { ttlMs: Number(process.env.SHEETS_CACHE_MS ?? 4000) });
+    g.__midapDb = new Db(createSheetsClient(configFromEnv()), { ttlMs: Number(process.env.SHEETS_CACHE_MS ?? 6000) });
   }
   return g.__midapDb;
 }

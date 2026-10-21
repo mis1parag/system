@@ -11,6 +11,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar } from "@/components/avatar";
+import { RemoveChecklistTasks } from "@/components/bulk-remove";
 import { DataTable, EmptyState, Field, PageHeader, Pill, Progress, Spinner } from "@/components/common";
 import { FilterBar, useFilters, type QuickDef } from "@/components/filters/filter-bar";
 import { BulkDialog, scheduleText, TaskDialog } from "@/components/checklist/task-dialogs";
@@ -29,13 +30,14 @@ interface Row { e: ChecklistEntry; t: ChecklistTask; covering: boolean; owner: s
 const groupOf = (f: string) => CHECKLIST_FREQ.find((x) => x.id === f)?.group ?? "";
 
 export default function ChecklistPage() {
-  const { allow, peopleFor } = useFlows();
+  const { allow, peopleFor, isSuper } = useFlows();
   const [tab, setTab] = useState("mine");
   const [fstate, setFstate] = useFilters("checklist:list", "mine");
   const sees = peopleFor("checklist").length > 1;
   return (
     <>
       <PageHeader help={{ id: "checklist", title: "All your repeating work in one place", text: "Daily, weekly, monthly and one-time tasks are all here. The buttons at the top are one-click filters (My tasks, Today, Pending, Overdue, Completed); open Filters for more — type, proof needed, department, dates. Tap the circle to tick a task; a task marked “Proof needed” asks for a link or a note. Late ticks count as not on time in the scorecard. Ticked by mistake? Undo within 30 minutes." }} title="Checklist" subtitle="Daily, non-daily and one-time tasks together — filter, add and tick right here." />
+      {isSuper && <div className="mb-3 flex justify-end"><RemoveChecklistTasks /></div>}
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <div className="mb-3 overflow-x-auto"><TabsList>
           <TabsTrigger value="mine">Checklist</TabsTrigger>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3Icon, CalendarDaysIcon, Columns3Icon, LayoutGridIcon, ListIcon, PencilIcon, PlusIcon, UploadIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState, PageHeader, Pill } from "@/components/common";
@@ -19,6 +19,7 @@ import { SheetView } from "@/components/flow/sheet-view";
 import { itemData, PRIORITY_RANK, tagList, taskState } from "@/lib/flow";
 import { PRIORITIES, type FlowItem, type FlowTask } from "@/lib/flow-types";
 import { applyFilters, downloadCsv, toCsv, type FieldDef } from "@/lib/filters";
+import { RemoveFmsEntries } from "@/components/bulk-remove";
 import { useFlows } from "@/lib/flow-store";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,10 @@ export default function FlowDetailPage() {
   const [loadingAll, setLoadingAll] = useState(false);
   const [allLoaded, setAllLoaded] = useState(isSuper); // the Super Admin already has the complete history
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // a switched-off FMS has no entries in the normal data: the Super Admin opening it asks for them (to look, remove or restore)
+  const off = !!flow?.archived;
+  useEffect(() => { if (off && isSuper) void loadHistory(id); }, [off, isSuper, id, loadHistory]);
 
   const pick = (v: View) => { setView(v); try { localStorage.setItem("fms-view", v); } catch { /* storage blocked */ } };
 
@@ -132,12 +137,13 @@ export default function FlowDetailPage() {
         actions={
           <>
             {allow("fms", "configure") && <Link href={`/flows/${flow.flowId}/edit`} className={cn(buttonVariants({ variant: "outline" }), "h-9")}><PencilIcon /> Edit FMS</Link>}
+            {isSuper && <RemoveFmsEntries flowId={flow.flowId} flowName={flow.name} />}
             {allow("fms", "import") && <Button variant="outline" onClick={() => setImporting(true)}><UploadIcon /> Import</Button>}
             {!flow.archived && allow("fms", "create") && <Button onClick={() => setAdding(true)}><PlusIcon /> New entry</Button>}
           </>
         }
       />
-      {flow.archived && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900">This FMS is archived — no new entries.</div>}
+      {flow.archived && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900">This FMS is switched off — nobody sees its entries or steps, and no reminders go out. Switch it on from the FMS list to use it again.</div>}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-muted p-0.5">

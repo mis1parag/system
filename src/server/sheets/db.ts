@@ -79,6 +79,7 @@ export interface CommitResult {
 export class Db {
   client: SheetsClient;
   ttlMs: number;
+  private inflight = new Map<string, Promise<Cell[][][]>>();
   private cache = new Map<string, { at: number; rows: Rec[] }>();
 
   constructor(client: SheetsClient, opts: { ttlMs?: number } = {}) {
@@ -122,13 +123,29 @@ export class Db {
     else names.forEach((n) => this.cache.delete(n));
   }
 
-  /** Read tables (cached for a few seconds; all stale ones in a single API call). Returned arrays are shared — do not mutate. */
+  /**
+   * Read tables (cached for a few seconds; all stale ones in a single API call). Returned arrays are shared — do not mutate.
+   * Google allows only ~60 reads a minute for the whole app, so: requests that arrive together share ONE read, and when Google says "quota exceeded"
+   * the tables read less than a minute ago are served as they are (a page being a few seconds old is far better than "Something went wrong").
+   */
   async load(names: string[], opts: { fresh?: boolean } = {}): Promise<Record<string, Rec[]>> {
     const now = Date.now();
     const stale = [...new Set(names)].filter((n) => opts.fresh || !this.cache.has(n) || now - this.cache.get(n)!.at > this.ttlMs);
     if (stale.length) {
-      const got = await this.client.batchGet(stale.map((n) => `${quoteTab(n)}!A2:${lastCol(TABLES[n])}`));
-      stale.forEach((n, i) => this.cache.set(n, { at: Date.now(), rows: parseRows(TABLES[n], got[i]) }));
+      const key = [...stale].sort().join(",");
+      let flight = this.inflight.get(key);
+      if (!flight) {
+        flight = this.client.batchGet(stale.map((n) => `${quoteTab(n)}!A2:${lastCol(TABLES[n])}`)).finally(() => this.inflight.delete(key));
+        this.inflight.set(key, flight);
+      }
+      try {
+        const got = await flight;
+        stale.forEach((n, i) => this.cache.set(n, { at: Date.now(), rows: parseRows(TABLES[n], got[i]) }));
+      } catch (e) {
+        const quota = e instanceof Error && /Google Sheets API 429/.test(e.message);
+        const usable = stale.every((n) => this.cache.has(n) && Date.now() - this.cache.get(n)!.at < 60_000);
+        if (!(quota && usable && !opts.fresh)) throw e;
+      }
     }
     return Object.fromEntries(names.map((n) => [n, this.cache.get(n)!.rows]));
   }

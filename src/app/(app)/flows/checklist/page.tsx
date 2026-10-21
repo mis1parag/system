@@ -72,7 +72,10 @@ function useRows() {
 
 function Unified({ state, onState }: { state: FilterState; onState: (s: FilterState) => void }) {
   const { data, meId, today, call, userName, optimistic, now, allow, peopleFor, inReach } = useFlows();
-  const rows = useRows();
+  const allRows = useRows();
+  // Daily / Non-daily / One-time: one tap, each with how much is still open
+  const [kindTab, setKindTab] = useState<"all" | "DC" | "NDC" | "OT">("all");
+  const rows = useMemo(() => (kindTab === "all" ? allRows : allRows.filter((r) => groupOf(r.t.freq) === kindTab)), [allRows, kindTab]);
   const [proofFor, setProofFor] = useState<Row | null>(null);
   const [busy, setBusy] = useState("");
   const [addPick, setAdding] = useState<boolean | null>(null);
@@ -176,6 +179,17 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
 
       {allow("checklist", "create") && <QuickAdd onMore={() => setAdding(true)} onBulk={() => setBulk(true)} />}
 
+      <div className="mb-2 flex flex-wrap gap-1.5" role="tablist" aria-label="Type of task">
+        {([["all", "All tasks"], ["DC", "Daily"], ["NDC", "Non-daily"], ["OT", "One-time"]] as const).map(([k, label]) => {
+          const mine = allRows.filter((r) => k === "all" || groupOf(r.t.freq) === k);
+          const openN = mine.filter((r) => r.e.status === "Pending" && r.e.plannedDate <= week).length;
+          return (
+            <button key={k} role="tab" aria-selected={kindTab === k} onClick={() => setKindTab(k)} className={cn("flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium", kindTab === k ? "border-primary bg-[#efeeff] text-[#4b3fd6]" : "bg-card text-muted-foreground hover:bg-muted")}>
+              {label}{openN > 0 && <span className={cn("rounded-full px-1.5 text-[10.5px] font-semibold", kindTab === k ? "bg-primary text-white" : "bg-muted-foreground/15")}>{openN}</span>}
+            </button>
+          );
+        })}
+      </div>
       <FilterBar page="checklist:list" module="checklist" fields={fields} quick={quick} state={state} onChange={onState} shown={shown.length} total={rows.length} placeholder="Search task, department, person…" onExport={exportRows} />
 
       {/* actions */}

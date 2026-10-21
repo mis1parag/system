@@ -33,7 +33,8 @@ export async function getLeaderboard(ctx: Ctx, d: Record<string, unknown>) {
   const offFlows = new Set((await ctx.tx.rows("Flows")).filter((f) => f.status === "Archived").map((f) => String(f.flowId)));
   const openItems = new Set((await ctx.tx.rows("Flow_Items")).filter((i) => i.status !== "Cancelled" && !offFlows.has(String(i.flowId))).map((i) => String(i.itemId)));
   const steps = (await ctx.tx.rows("Flow_Tasks")).filter((t) => t.status !== "Skipped" && t.planned && String(t.planned).slice(0, 10) >= from && String(t.planned).slice(0, 10) <= to && openItems.has(String(t.itemId)));
-  const cl = (await ctx.tx.rows("Checklist_Log")).filter((l) => l.status !== "Cancelled" && l.status !== "Skipped" && String(l.plannedDate) >= from && String(l.plannedDate) <= to);
+  const archivedTasks = new Set((await ctx.tx.rows("Checklist_Tasks")).filter((c) => c.status === "Archived").map((c) => String(c.ctId)));
+  const cl = (await ctx.tx.rows("Checklist_Log")).filter((l) => l.status !== "Cancelled" && l.status !== "Skipped" && !archivedTasks.has(String(l.ctId)) && String(l.plannedDate) >= from && String(l.plannedDate) <= to);
 
   const nowDT = ctx.clock.dt;
   const rows: BoardRow[] = users.map((u) => {

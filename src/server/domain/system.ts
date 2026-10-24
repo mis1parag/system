@@ -55,7 +55,7 @@ export async function runTick(db: Db, cfg: DeliveryConfig = deliveryFromEnv(), n
   let errors: string[] = [];
   if (ctx.outbox.length) {
     const { Users } = await db.load(["Users"]);
-    errors = (await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "MIDAP"))).errors;
+    errors = (await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "Parag Unify Crafts"))).errors;
   }
   // salary-slip e-mails that are due again (failed earlier, or waiting for e-mail to be set up)
   const mails = await processMailQueue(db, cfg, { now }).catch((e) => ({ sent: 0, failed: 0, waiting: 0, notes: [String(e?.message ?? e)] }));

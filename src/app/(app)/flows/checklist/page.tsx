@@ -1,26 +1,22 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRightLeftIcon, CheckIcon, CircleIcon, ClipboardPasteIcon, LinkIcon, PencilIcon, PlusIcon, Undo2Icon } from "lucide-react";
+import { ArrowRightLeftIcon, CheckIcon, CircleIcon, LinkIcon, PlusIcon, Undo2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar } from "@/components/avatar";
 import { RemoveChecklistTasks } from "@/components/bulk-remove";
-import { DataTable, EmptyState, Field, PageHeader, Pill, Progress, Spinner } from "@/components/common";
+import { DataTable, EmptyState, PageHeader, Pill, Progress, Spinner } from "@/components/common";
 import { FilterBar, useFilters, type QuickDef } from "@/components/filters/filter-bar";
-import { BulkDialog, scheduleText, TaskDialog } from "@/components/checklist/task-dialogs";
+import { AddTaskPanel, TaskManager } from "@/components/checklist/task-manager";
+import { ProofDialog, ProofPicture } from "@/components/checklist/proof-dialog";
 import { MoveDialog } from "@/components/move-dialog";
 import { checklistOwner, FREQ_LABEL } from "@/lib/checklist-shared";
-import { plannedDates } from "@/lib/checklist-schedule";
 import { ChecklistMoreTimeDialog } from "@/components/checklist/more-time-dialog";
 import { applyFilters, downloadCsv, EMPTY_FILTER, toCsv, type FieldDef, type FilterState } from "@/lib/filters";
-import { CHECKLIST_FREQ, type ChecklistEntry, type ChecklistFreq, type ChecklistTask } from "@/lib/flow-types";
+import { CHECKLIST_FREQ, type ChecklistEntry, type ChecklistTask } from "@/lib/flow-types";
 import { addDays, fmtDate, weekdayName } from "@/lib/dates";
 import { useFlows } from "@/lib/flow-store";
 import { cn } from "@/lib/utils";
@@ -31,7 +27,7 @@ const groupOf = (f: string) => CHECKLIST_FREQ.find((x) => x.id === f)?.group ?? 
 
 export default function ChecklistPage() {
   const { allow, peopleFor, isSuper } = useFlows();
-  const [tab, setTab] = useState("mine");
+  const [tab, setTab] = useState(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1" ? "add" : "mine"));
   const [fstate, setFstate] = useFilters("checklist:list", "mine");
   const sees = peopleFor("checklist").length > 1;
   return (
@@ -42,11 +38,13 @@ export default function ChecklistPage() {
         <div className="mb-3 overflow-x-auto"><TabsList>
           <TabsTrigger value="mine">Checklist</TabsTrigger>
           {sees && <TabsTrigger value="team">Team today</TabsTrigger>}
-          {allow("checklist", "manage") && <TabsTrigger value="tasks">Task setup</TabsTrigger>}
+          {allow("checklist", "create") && <TabsTrigger value="add">Add task</TabsTrigger>}
+          {allow("checklist", "manage") && <TabsTrigger value="tasks">Manage tasks</TabsTrigger>}
         </TabsList></div>
-        <TabsContent value="mine"><Unified state={fstate} onState={setFstate} /></TabsContent>
+        <TabsContent value="mine"><Unified state={fstate} onState={setFstate} onAdd={() => setTab("add")} /></TabsContent>
         {sees && <TabsContent value="team"><TeamToday onOpen={(id) => { setFstate({ ...EMPTY_FILTER("pending"), conds: [{ id: "p1", field: "who", op: "is", value: id }] }); setTab("mine"); }} /></TabsContent>}
-        {allow("checklist", "manage") && <TabsContent value="tasks"><ManageTasks /></TabsContent>}
+        {allow("checklist", "create") && <TabsContent value="add"><AddTaskPanel /></TabsContent>}
+        {allow("checklist", "manage") && <TabsContent value="tasks"><TaskManager onAdd={() => setTab("add")} /></TabsContent>}
       </Tabs>
     </>
   );
@@ -70,7 +68,7 @@ function useRows() {
   }, [data, today]);
 }
 
-function Unified({ state, onState }: { state: FilterState; onState: (s: FilterState) => void }) {
+function Unified({ state, onState, onAdd }: { state: FilterState; onState: (s: FilterState) => void; onAdd: () => void }) {
   const { data, meId, today, call, userName, optimistic, now, allow, peopleFor, inReach } = useFlows();
   const allRows = useRows();
   // Daily / Non-daily / One-time: one tap, each with how much is still open
@@ -78,10 +76,6 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
   const rows = useMemo(() => (kindTab === "all" ? allRows : allRows.filter((r) => groupOf(r.t.freq) === kindTab)), [allRows, kindTab]);
   const [proofFor, setProofFor] = useState<Row | null>(null);
   const [busy, setBusy] = useState("");
-  const [addPick, setAdding] = useState<boolean | null>(null);
-  const wantAdd = useSearchParams().get("add") === "1";
-  const adding = addPick ?? (wantAdd && allow("checklist", "create"));
-  const [bulk, setBulk] = useState(false);
   const [moving, setMoving] = useState<string[] | null>(null);
   const [asking, setAsking] = useState<Row | null>(null);
   const askedIds = new Set((data?.requests ?? []).filter((q) => q.kind === "checklist" && q.status === "Pending").map((q) => q.taskId));
@@ -126,7 +120,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
   const mineDone = mineToday.filter((r) => r.e.status === "Done").length;
   const pct = mineToday.length ? Math.round((mineDone / mineToday.length) * 100) : 100;
   const canEdit = allow("checklist", "edit");
-  const mayTick = (r: Row) => canEdit && r.e.status === "Pending" && r.e.plannedDate <= today && (r.owner === meId || r.e.doerId === meId || allow("checklist", "manage") || inReach(r.owner, "checklist") && r.owner !== meId && allow("checklist", "edit"));
+  const mayTick = (r: Row) => canEdit && r.e.status === "Pending" && (r.e.plannedDate <= today || r.t.freq !== "D") && (r.owner === meId || r.e.doerId === meId || allow("checklist", "manage") || inReach(r.owner, "checklist") && r.owner !== meId && allow("checklist", "edit"));
   const canMove = allow("checklist", "assign");
 
   async function tick(r: Row) {
@@ -162,7 +156,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
       <h2 className="mb-1.5 flex items-center gap-2 text-sm font-semibold"><Pill tone={tone}>{title}</Pill><span className="text-muted-foreground">{items.length}</span></h2>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">{items.map((r) => (
         <Item key={r.e.clId} r={r} showWho={people.length > 1} busy={busy === r.e.clId} canTick={mayTick(r)} onTick={() => tick(r)}
-          asked={askedIds.has(r.e.clId)} onMore={r.e.status === "Pending" && mayTick(r) && !askedIds.has(r.e.clId) ? () => setAsking(r) : undefined}
+          asked={askedIds.has(r.e.clId)} onMore={r.e.status === "Pending" && mayTick(r) && r.e.plannedDate <= today && !askedIds.has(r.e.clId) ? () => setAsking(r) : undefined}
           onUndo={r.e.status === "Done" && r.e.actual.slice(0, 10) === today && canEdit ? () => undo(r.e.clId) : undefined}
           selected={picked.has(r.e.clId)} onSelect={r.e.status === "Pending" && (mayTick(r) || canMove) ? () => toggle(r.e.clId) : undefined} />
       ))}</div>
@@ -177,7 +171,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
         <Progress value={pct} />
       </div>
 
-      {allow("checklist", "create") && <QuickAdd onMore={() => setAdding(true)} onBulk={() => setBulk(true)} />}
+      {allow("checklist", "create") && <div className="mb-3 flex justify-end"><Button onClick={onAdd}><PlusIcon /> Add task</Button></div>}
 
       <div className="mb-2 flex flex-wrap gap-1.5" role="tablist" aria-label="Type of task">
         {([["all", "All tasks"], ["DC", "Daily"], ["NDC", "Non-daily"], ["OT", "One-time"]] as const).map(([k, label]) => {
@@ -211,9 +205,7 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
       {list("Today", todays, "amber")}
       {list("Coming up", coming, "blue")}
       {list("Done", done, "green")}
-      {proofFor && <ProofDialog row={proofFor} onClose={() => setProofFor(null)} />}
-      {adding && <TaskDialog onClose={() => setAdding(false)} />}
-      {bulk && <BulkDialog onClose={() => setBulk(false)} />}
+      {proofFor && <ProofDialog clId={proofFor.e.clId} title={proofFor.t.title} onClose={() => setProofFor(null)} />}
       {asking && <ChecklistMoreTimeDialog clId={asking.e.clId} title={asking.t.title} plannedDate={asking.e.plannedDate} onClose={() => setAsking(null)} />}
       {moving && <MoveDialog kind="checklist" ids={moving} onClose={(ok) => { setMoving(null); if (ok) setPicked(new Set()); }} />}
     </>
@@ -221,41 +213,6 @@ function Unified({ state, onState }: { state: FilterState; onState: (s: FilterSt
 }
 
 /** One-line new entry right on the page. */
-function QuickAdd({ onMore, onBulk }: { onMore: () => void; onBulk: () => void }) {
-  const { call, today, peopleFor, meId, allow } = useFlows();
-  const people = allow("checklist", "assign") ? peopleFor("checklist") : peopleFor("checklist").filter((u) => u.userId === meId);
-  const [title, setTitle] = useState("");
-  const [doer, setDoer] = useState("");
-  const [freq, setFreq] = useState<ChecklistFreq>("D");
-  const [start, setStart] = useState(today);
-  const [proof, setProof] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  async function add() {
-    setBusy(true); setErr("");
-    const r = await call<{ created: number }>("saveChecklistTask", { title, doerId: doer || meId, freq, startDate: start, proof: proof ? "Y" : "N" });
-    setBusy(false);
-    if (!r.ok) { setErr(r.error || "Could not add"); return; }
-    toast.success(`Added — ${r.data!.created} entr${r.data!.created === 1 ? "y" : "ies"} created`);
-    setTitle("");
-  }
-  return (
-    <div className="mb-3 rounded-lg border border-dashed bg-card p-3">
-      <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (title.trim()) add(); }}>
-        <div className="min-w-48 flex-[3]"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-title">New task</label><Input id="qa-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What has to be done?" /></div>
-        {people.length > 1 && <div className="w-36"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-who">Who</label><NativeSelect id="qa-who" value={doer || meId} onChange={(e) => setDoer(e.target.value)}>{people.map((u) => <option key={u.userId} value={u.userId}>{u.userId === meId ? "Me" : u.name}</option>)}</NativeSelect></div>}
-        <div className="w-36"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-freq">How often</label><NativeSelect id="qa-freq" value={freq} onChange={(e) => setFreq(e.target.value as ChecklistFreq)}>{CHECKLIST_FREQ.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</NativeSelect></div>
-        <div className="w-36"><label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="qa-start">{freq === "O" ? "On" : "Starting"}</label><Input id="qa-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
-        <label className="flex h-9 items-center gap-1.5 text-sm"><input type="checkbox" className="h-4 w-4 rounded border-input" checked={proof} onChange={(e) => setProof(e.target.checked)} /> Proof needed</label>
-        <Button type="submit" disabled={busy || !title.trim()}>{busy ? <Spinner /> : <><PlusIcon /> Add</>}</Button>
-        <Button type="button" variant="ghost" onClick={onMore}>More options</Button>
-        {allow("checklist", "import") && <Button type="button" variant="ghost" onClick={onBulk} aria-label="Paste many tasks"><ClipboardPasteIcon /> Paste many</Button>}
-      </form>
-      {err && <p role="alert" className="mt-1.5 text-sm text-red-700">{err}</p>}
-    </div>
-  );
-}
-
 function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect, asked, onMore }: { r: Row; showWho?: boolean; busy: boolean; canTick: boolean; onTick: () => void; onUndo?: () => void; selected?: boolean; onSelect?: () => void; asked?: boolean; onMore?: () => void }) {
   const { today, userName } = useFlows();
   const done = r.e.status === "Done";
@@ -279,6 +236,7 @@ function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect, a
           <span className={cn(late && "font-medium text-[#a41c4e]")}>· {late ? `was due ${weekdayName(r.e.plannedDate).slice(0, 3)} ${fmtDate(r.e.plannedDate)}` : done ? `done ${r.e.actual.slice(0, 10) === today ? "" : fmtDate(r.e.actual.slice(0, 10)) + " "}${r.e.actual.slice(11)}${r.e.actual.slice(0, 10) > r.e.plannedDate ? " (late)" : ""}` : fmtDate(r.e.plannedDate)}</span>
           {r.e.origDate && r.e.origDate !== r.e.plannedDate && <span title="Moved from its first date">· moved from {fmtDate(r.e.origDate)}</span>}
           {r.covering && <Pill tone="violet">{done ? `for ${userName(r.e.doerId)}` : `covering ${userName(r.e.doerId)}`}</Pill>}
+          {r.e.proofImg && <ProofPicture clId={r.e.clId} />}
           {needsProof && !done && <Pill tone="amber"><LinkIcon className="mr-0.5 inline size-3" />Proof needed</Pill>}
           {r.e.proof && /^https?:\/\//.test(r.e.proof) && <a href={r.e.proof} target="_blank" rel="noopener noreferrer" className="text-primary underline">proof</a>}
           {r.e.proof && !/^https?:\/\//.test(r.e.proof) && <span title={r.e.proof}>· proof: {r.e.proof.slice(0, 40)}</span>}
@@ -288,35 +246,6 @@ function Item({ r, showWho, busy, canTick, onTick, onUndo, selected, onSelect, a
       {onMore && <button onClick={onMore} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted" title="Ask your manager for more time">More time</button>}
       {onUndo && <button onClick={onUndo} aria-label="Undo" className="rounded p-1.5 text-muted-foreground hover:bg-muted"><Undo2Icon className="size-4" /></button>}
     </div>
-  );
-}
-
-function ProofDialog({ row, onClose }: { row: Row; onClose: () => void }) {
-  const { call } = useFlows();
-  const [proof, setProof] = useState("");
-  const [remarks, setRemarks] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  async function save() {
-    setBusy(true); setErr("");
-    const r = await call("completeChecklist", { clId: row.e.clId, proof, remarks });
-    setBusy(false);
-    if (!r.ok) { setErr(r.error || "Could not save"); return; }
-    toast.success("Done");
-    onClose();
-  }
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{row.t.title}</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <Field label="Proof *" hint="Paste a link (Drive, screenshot, invoice…) or write a short note."><Input value={proof} onChange={(e) => setProof(e.target.value)} autoFocus /></Field>
-          <Field label="Remarks (optional)"><Textarea rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)} /></Field>
-          {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
-        </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy || !proof.trim()}>{busy ? <Spinner /> : "Mark done"}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -349,63 +278,5 @@ function TeamToday({ onOpen }: { onOpen: (id: string) => void }) {
         </tr>
       ))}
     </DataTable>
-  );
-}
-
-function ManageTasks() {
-  const { data, userName, today, call } = useFlows();
-  const [q, setQ] = useState("");
-  const [who, setWho] = useState("");
-  const [freq, setFreq] = useState("");
-  const [status, setStatus] = useState("Active");
-  const [edit, setEdit] = useState<ChecklistTask | "new" | null>(null);
-  const [bulk, setBulk] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const { peopleFor } = useFlows();
-  const people = peopleFor("checklist");
-  const tasks = (data?.checklistTasks ?? [])
-    .filter((t) => (!who || t.doerId === who) && (!freq || t.freq === freq) && (!status || t.status === status) && (!q || `${t.title} ${t.department}`.toLowerCase().includes(q.toLowerCase())))
-    .sort((a, b) => userName(a.doerId).localeCompare(userName(b.doerId)) || a.title.localeCompare(b.title));
-  const cal = useMemo(() => ({ off: new Set(String(data?.settings?.WEEKLY_OFF ?? "0").split(",").filter((x) => /^[0-6]$/.test(x.trim())).map(Number)), holidays: new Set((data?.holidays ?? []).filter((h) => !h.flowId).map((h) => h.date)) }), [data]);
-  const next = (t: ChecklistTask) => plannedDates(t, today, addDays(today, 40), cal)[0] ?? "";
-
-  async function generate() {
-    setBusy(true);
-    const r = await call<{ created: number }>("generateChecklist", {});
-    setBusy(false);
-    if (!r.ok) toast.error(r.error || "Failed"); else toast.success(`${r.data!.created} entr${r.data!.created === 1 ? "y" : "ies"} created`);
-  }
-
-  return (
-    <>
-      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-6">
-        <Input className="col-span-2 h-10" placeholder="Search task or department…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <NativeSelect value={who} onChange={(e) => setWho(e.target.value)} aria-label="Doer"><option value="">Everyone</option>{people.map((u) => <option key={u.userId} value={u.userId}>{u.name}</option>)}</NativeSelect>
-        <NativeSelect value={freq} onChange={(e) => setFreq(e.target.value)} aria-label="Frequency"><option value="">Any frequency</option>{CHECKLIST_FREQ.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</NativeSelect>
-        <NativeSelect value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status"><option value="">Any status</option><option>Active</option><option>Paused</option></NativeSelect>
-        <div className="flex gap-2"><Button size="sm" className="h-10 flex-1" onClick={() => setEdit("new")}><PlusIcon /> Add</Button><Button size="sm" variant="outline" className="h-10" onClick={() => setBulk(true)} aria-label="Paste many"><ClipboardPasteIcon /></Button></div>
-      </div>
-      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{tasks.length} task{tasks.length === 1 ? "" : "s"}</span>
-        <button className="underline" onClick={generate} disabled={busy}>{busy ? "Working…" : "Create coming entries now"}</button>
-      </div>
-      {tasks.length === 0 ? <EmptyState title="No tasks match" hint="Add a task, or paste your list from the Drive sheet." /> : (
-        <DataTable head={["Task", "Doer", "Buddy", "How often", "Next", "Proof", ""]}>
-          {tasks.slice(0, 300).map((t) => (
-            <tr key={t.ctId} className={cn(t.status !== "Active" && "opacity-60")}>
-              <td className="max-w-72"><span className="line-clamp-2 font-medium">{t.title}</span>{t.department && <span className="text-xs text-muted-foreground">{t.department}</span>}</td>
-              <td>{userName(t.doerId)}</td><td className="text-muted-foreground">{t.backupId ? userName(t.backupId) : "—"}</td>
-              <td className="text-xs" title={scheduleText(t.freq, t.startDate)}>{FREQ_LABEL[t.freq]}{t.status !== "Active" && <Pill tone="gray" className="ml-1">{t.status}</Pill>}</td>
-              <td className="whitespace-nowrap text-xs">{next(t) ? fmtDate(next(t)) : "—"}</td>
-              <td>{t.proof === "Y" ? "Yes" : ""}</td>
-              <td><button aria-label={`Edit ${t.title}`} onClick={() => setEdit(t)} className="rounded p-1 text-muted-foreground hover:bg-muted"><PencilIcon className="size-3.5" /></button></td>
-            </tr>
-          ))}
-        </DataTable>
-      )}
-      {tasks.length > 300 && <p className="mt-2 text-xs text-muted-foreground">Showing 300 of {tasks.length} — narrow the filters.</p>}
-      {edit && <TaskDialog task={edit === "new" ? undefined : edit} onClose={() => setEdit(null)} />}
-      {bulk && <BulkDialog onClose={() => setBulk(false)} />}
-    </>
   );
 }

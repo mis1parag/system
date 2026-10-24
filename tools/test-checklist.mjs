@@ -18,6 +18,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log("  ✗ FAIL:", 
 const section = (s) => console.log("\n" + s);
 // IST wall-clock → Date
 const at = (date, hm = "10:00") => new Date(`${date}T${hm}:00+05:30`);
+const denied = (r) => !r.ok && r.code === "FORBIDDEN";
 const call = (actor, action, data = {}, now) => runAction(db, actor, action, data, { now: now ? at(...[].concat(now)) : undefined });
 
 const boss = (await runSetup(db, { name: "Owner", mobile: "9999999999", pin: "1234", demo: true })).userId;
@@ -239,6 +240,59 @@ const adminView = (await call(PRIYA, "getFlowData", {}, "2026-10-09")).data;
 ok(superView.checklistLog.some((l) => l.clId === oldE.clId), "Super Admin gets old, finished checklist entries too");
 ok(!adminView.checklistLog.some((l) => l.clId === oldE.clId), "an Admin gets the recent window only");
 ok(superView.checklistTasks.length >= adminView.checklistTasks.length && superView.users.length === adminView.users.length, "the Super Admin sees at least everything an Admin sees");
+
+
+section("delete ONE task (its unfinished entries go, history stays, nothing else changes)");
+const dA = await call(boss, "saveChecklistTask", { title: "Task A to delete", doerId: KUNAL, freq: "D", startDate: MON }, MON);
+const dB = await call(boss, "saveChecklistTask", { title: "Task B stays", doerId: KUNAL, freq: "D", startDate: MON }, MON);
+const logOf = async (ctId) => (await db.load(["Checklist_Log"], { fresh: true })).Checklist_Log.filter((l) => l.ctId === ctId);
+const aBefore = await logOf(dA.data.task.ctId), bBefore = await logOf(dB.data.task.ctId);
+const aFirst = aBefore.sort((x, y) => x.plannedDate.localeCompare(y.plannedDate))[0];
+await call(KUNAL, "completeChecklist", { clId: aFirst.clId }, MON);
+ok(denied(await call(NIDHI, "deleteChecklistTask", { ctId: dA.data.task.ctId }, MON)) && denied(await call(KUNAL, "deleteChecklistTask", { ctId: dA.data.task.ctId }, MON)), "an ordinary user cannot delete tasks (not even their own)");
+ok(!(await call(boss, "deleteChecklistTask", { ctId: "CLT-NOPE" }, MON)).ok, "an unknown task is refused");
+const del = await call(boss, "deleteChecklistTask", { ctId: dA.data.task.ctId, reason: "not needed" }, MON);
+const aAfter = await logOf(dA.data.task.ctId), bAfter = await logOf(dB.data.task.ctId);
+ok(del.ok && del.data.kept === 1 && del.data.cancelled === aBefore.length - 1, `the task's unfinished entries are cancelled (${del.data?.cancelled}), the ticked one stays (${del.data?.kept})`);
+ok(aAfter.filter((l) => l.status === "Pending").length === 0 && aAfter.filter((l) => l.status === "Done").length === 1, "nothing of it is pending any more; the done entry is still there");
+ok(bAfter.length === bBefore.length && bAfter.every((l) => l.status === "Pending"), "the other task of the same person is untouched");
+ok(!(await call(KUNAL, "getFlowData", {}, MON)).data.checklistTasks.some((t) => t.ctId === dA.data.task.ctId), "it is gone from Kunal's lists");
+ok(!(await call(boss, "deleteChecklistTask", { ctId: dA.data.task.ctId }, MON)).ok, "deleting it twice is refused");
+const back = await call(boss, "saveChecklistTask", { ctId: dA.data.task.ctId, title: "Task A to delete", doerId: KUNAL, freq: "D", startDate: MON, status: "Active" }, MON);
+ok(back.ok && back.data.created > 0 && (await call(KUNAL, "getFlowData", {}, MON)).data.checklistTasks.some((t) => t.ctId === dA.data.task.ctId), "a deleted task can be brought back (its entries are created again)");
+ok(denied(await call(NIDHI, "deleteChecklistTask", { ctId: dB.data.task.ctId }, MON)), "(still) only people with the right can delete");
+
+section("upcoming: not for daily tasks; yes for non-daily and one-time. Proof: a picture or a note, at least one");
+const PIC = "data:image/jpeg;base64," + "B".repeat(600);
+const FUT = "2026-10-12";
+const dd = await call(boss, "saveChecklistTask", { title: "Daily upcoming test", doerId: KUNAL, freq: "D", startDate: MON }, MON);
+const ww = await call(boss, "saveChecklistTask", { title: "Weekly upcoming test", doerId: KUNAL, freq: "W", startDate: FUT, proof: "Y" }, MON);
+const oo = await call(boss, "saveChecklistTask", { title: "One-time upcoming test", doerId: KUNAL, freq: "O", startDate: FUT, proof: "Y" }, MON);
+const entryOf = async (ctId, date) => (await logOf(ctId)).find((l) => l.plannedDate === date);
+const dEntry = (await logOf(dd.data.task.ctId)).filter((l) => l.plannedDate > MON).sort((x, y) => x.plannedDate.localeCompare(y.plannedDate))[0];
+const wEntry = await entryOf(ww.data.task.ctId, FUT), oEntry = await entryOf(oo.data.task.ctId, FUT);
+ok(dEntry && wEntry && oEntry, "(fixture) an upcoming daily, weekly and one-time entry exist");
+const upD = await call(KUNAL, "completeChecklist", { clId: dEntry.clId }, MON);
+ok(!upD.ok && /daily task can only be ticked on its own day/.test(upD.error), "a DAILY task cannot be ticked before its day");
+ok(!(await call(KUNAL, "completeChecklistMany", { clIds: [dEntry.clId] }, MON)).data.done, "…not even with 'tick many'");
+ok(!(await call(boss, "completeChecklist", { clId: dEntry.clId }, MON)).ok, "…and not by an admin either");
+const noProof = await call(KUNAL, "completeChecklist", { clId: wEntry.clId }, MON);
+ok(!noProof.ok && /picture or write a note/.test(noProof.error), "a weekly task that needs proof refuses neither picture nor note");
+ok(!(await call(KUNAL, "completeChecklist", { clId: wEntry.clId, proofImage: "data:image/png;base64,AAAA" }, MON)).ok && !(await call(KUNAL, "completeChecklist", { clId: wEntry.clId, proofImage: "junk" }, MON)).ok, "a PNG or junk is not accepted as a picture");
+const wDone = await call(KUNAL, "completeChecklist", { clId: wEntry.clId, proofImage: PIC }, MON);
+ok(wDone.ok && wDone.data.status === "Done" && wDone.data.proofImg && String(wDone.data.actual).slice(0, 10) < FUT, "a NON-DAILY task can be done ahead of time — with a picture only");
+const oDone = await call(KUNAL, "completeChecklist", { clId: oEntry.clId, proof: "Sent by email to the CA" }, MON);
+ok(oDone.ok && oDone.data.status === "Done" && !oDone.data.proofImg, "a ONE-TIME task can be done ahead of time — with a note only");
+const lg = (await db.load(["Checklist_Log"], { fresh: true })).Checklist_Log;
+ok(lg.find((l) => l.clId === wEntry.clId).actual.slice(0, 10) <= FUT && lg.find((l) => l.clId === oEntry.clId).actual.slice(0, 10) <= FUT, "done ahead of time counts as on time");
+const prf = await call(KUNAL, "getChecklistProof", { clId: wEntry.clId }, MON);
+ok(prf.ok && prf.data.image === PIC, "the person can open their proof picture");
+ok((await call(boss, "getChecklistProof", { clId: wEntry.clId }, MON)).ok, "…and so can the Super Admin");
+ok(denied(await call(NIDHI, "getChecklistProof", { clId: wEntry.clId }, MON)), "…but not a colleague");
+ok(!(await call(KUNAL, "getChecklistProof", { clId: oEntry.clId }, MON)).ok, "an entry without a picture says so");
+ok(!JSON.stringify((await call(NIDHI, "getFlowData", {}, MON)).data).includes("BBBBBBBB"), "the picture is not part of the page data");
+const upDaily2 = await call(KUNAL, "completeChecklist", { clId: dEntry.clId }, dEntry.plannedDate);
+ok(upDaily2.ok, "on its own day the daily task can be ticked");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 [fake, fake2, fake3].forEach((x) => x.close());

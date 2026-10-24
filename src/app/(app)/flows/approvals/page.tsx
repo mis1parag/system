@@ -26,16 +26,39 @@ export default function ApprovalsPage() {
     return { task, item, flow, step: flow?.steps.find((s) => s.stepId === task?.stepId) };
   };
   const canDecideCl = (requestedBy: string) => isSuper || data?.users.find((u) => u.userId === requestedBy)?.managerId === meId || (allow("checklist", "manage") && inReach(requestedBy, "checklist"));
+  const canDecideCo = (requestedBy: string) => isSuper || data?.users.find((u) => u.userId === requestedBy)?.managerId === meId || (allow("attendance", "approve") && inReach(requestedBy, "attendance"));
   const canDecide = (requestedBy: string) => isSuper || data?.users.find((u) => u.userId === requestedBy)?.managerId === meId || (can("decideRequests") && inReach(requestedBy, "work"));
 
-  async function decide(id: string, approve: boolean) {
+  async function decide(id: string, approve: boolean, okText = "Approved — planned time moved") {
     setBusy(id);
     const r = await call("decideRequest", { requestId: id, approve, note: note[id] ?? "" });
     setBusy("");
-    if (!r.ok) toast.error(r.error || "Failed"); else toast.success(approve ? "Approved — planned time moved" : "Rejected");
+    if (!r.ok) toast.error(r.error || "Failed"); else toast.success(approve ? okText : "Rejected");
   }
 
   const card = (r: (typeof requests)[number], actions: boolean) => {
+    if (r.kind === "checkout") {
+      const row = data?.attendance.find((a) => a.attId === r.taskId);
+      return (
+        <div key={r.requestId} className="rounded-xl border bg-card p-3 text-sm">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0"><div className="font-medium">Forgot to check out <Pill tone="amber">Attendance</Pill></div><div className="text-xs text-muted-foreground">asked by {userName(r.requestedBy)} · {fmtDT(r.createdAt)}</div></div>
+            {!actions && <Pill tone={r.status === "Approved" ? "green" : "red"}>{r.status}{r.decidedBy ? ` by ${userName(r.decidedBy)}` : ""}</Pill>}
+          </div>
+          <div className="mt-2 text-xs">{row ? <>Checked in <b>{fmtDT(row.checkIn)}</b> → </> : null}says they left at <b>{fmtDT(r.newPlanned)}</b>. The day is marked only when you approve.</div>
+          {r.reason && <p className="mt-1 text-xs text-muted-foreground">“{r.reason}”</p>}
+          {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}
+          {actions && canDecideCo(r.requestedBy) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Input className="h-9 min-w-40 flex-1" placeholder="Note (optional)" value={note[r.requestId] ?? ""} onChange={(ev) => setNote({ ...note, [r.requestId]: ev.target.value })} />
+              <Button size="sm" className="h-9" disabled={busy === r.requestId} onClick={() => decide(r.requestId, true, "Approved — the check-out is marked")}><CheckIcon /> Approve</Button>
+              <Button size="sm" variant="outline" className="h-9 text-red-700" disabled={busy === r.requestId} onClick={() => decide(r.requestId, false)}><XIcon /> Reject</Button>
+            </div>
+          )}
+          {actions && !canDecideCo(r.requestedBy) && <p className="mt-2 text-xs text-muted-foreground">Waiting for an approver.</p>}
+        </div>
+      );
+    }
     if (r.kind === "checklist") {
       const e = data?.checklistLog.find((l) => l.clId === r.taskId);
       const t = data?.checklistTasks.find((c) => c.ctId === r.itemId);

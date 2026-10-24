@@ -8,6 +8,7 @@
  *  - state guards (e.g. "only if the step is still not done") re-read the row just before writing.
  */
 import { colLetter, quoteTab, type Cell, type SheetsClient } from "./client.ts";
+import { tabRequests } from "./format.ts";
 import { DEFAULT_SETTINGS, TABLES, TABLE_ORDER, type TableDef } from "./schema.ts";
 
 export type Rec = { [k: string]: string | number | null | undefined; _row?: number };
@@ -96,7 +97,10 @@ export class Db {
     const after = missing.length ? await this.client.listTabs() : tabs;
     const ids = new Map(after.map((t) => [t.title, t.sheetId]));
     await this.client.batchUpdate(TABLE_ORDER.map((n) => ({ range: `${quoteTab(n)}!A1:${lastCol(TABLES[n])}1`, values: [TABLES[n].cols.map((c) => c[1])] })));
-    for (const n of missing) await this.client.styleHeader(ids.get(n)!, TABLES[n].cols.length);
+    for (const n of missing) {
+      await this.client.styleHeader(ids.get(n)!, TABLES[n].cols.length);
+      try { await this.client.formatBatch(tabRequests(ids.get(n)!, n)); } catch { /* the look is a nicety: never stop the app for it */ }
+    }
     this.invalidate();
     const tx = this.begin("system");
     const settings = await tx.rows("Settings");

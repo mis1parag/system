@@ -119,7 +119,13 @@ export const TABLES: Record<string, TableDef> = {
       ["clId", "Checklist Entry ID", "s"], ["ctId", "Checklist Task", "s"], ["doerId", "Doer", "s"], ["plannedDate", "Planned", "s"],
       ["status", "Status", "s"], ["actual", "Actual", "s"], ["doneBy", "Done By", "s"], ["proof", "Proof / Link", "s"], ["remarks", "Remarks", "s"],
       ["remindedAt", "Reminded At", "s"], ["createdAt", "Created", "s"], ["updatedAt", "Updated", "s"], ["origDate", "Original Planned", "s"], ["movedBy", "Moved By", "s"],
+      ["proofImg", "Proof picture ID", "s"],
     ],
+  },
+  /** The picture a person uploads as proof of a checklist entry (small JPEG). Kept out of the page data; fetched one at a time by people allowed to see that entry. */
+  Checklist_Proofs: {
+    name: "Checklist_Proofs", idKey: "proofId", prefix: "CPR",
+    cols: [["proofId", "Proof picture ID", "s"], ["clId", "Checklist entry", "s"], ["userId", "Uploaded by", "s"], ["createdAt", "Uploaded", "s"], ["image", "Image (JPEG data)", "s"]],
   },
   Attendance: {
     name: "Attendance", idKey: "attId", prefix: "ATT", softDelete: true,
@@ -254,11 +260,11 @@ export const TABLES: Record<string, TableDef> = {
   },
 };
 
-export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Salary_Structure", "Pay_Waivers", "Slip_Requests", "Notes", "Reminders", "Announcements", "Mail_Log", "Devices", "Att_Exempt", "Settings", "Audit_Log"];
+export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comments", "Requests", "Notifications", "Holidays", "Absences", "Checklist_Tasks", "Checklist_Log", "Checklist_Proofs", "Attendance", "Attendance_Photos", "Leaves", "Profile_Photos", "Employee_Details", "Roles", "Quick_Links", "Vault_Items", "Vault_Access", "Saved_Filters", "Leave_Policy", "Leave_Adjust", "Salary_Slips", "Salary_Structure", "Pay_Waivers", "Slip_Requests", "Notes", "Reminders", "Announcements", "Mail_Log", "Devices", "Att_Exempt", "Settings", "Audit_Log"];
 
 /** [key, default, description] */
 export const DEFAULT_SETTINGS: [string, string, string][] = [
-  ["COMPANY_NAME", "MIDAP", "Shown in the app header and notifications"],
+  ["COMPANY_NAME", "Parag Unify Crafts", "Shown in the app header and notifications"],
   ["LEAVE_BLOCK_OVERDRAW", "N", "Y = a leave request that goes beyond the balance is refused (N = it is allowed with a warning)"],
   ["TIMEZONE", "Asia/Kolkata", "IANA timezone for 'now' and 'today' (planned / actual times)"],
   ["REMINDER_MINUTES", "60", "Remind the doer this many minutes before a step is due (a step can override it)"],

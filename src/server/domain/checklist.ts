@@ -6,6 +6,7 @@ import { CHECKLIST_FREQ, type ChecklistFreq } from "../../lib/flow-types.ts";
 import { checklistOwner, parseFreq } from "../../lib/checklist-shared.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
+import { isJpeg } from "./devices.ts";
 import { absenceRows } from "./tasks.ts";
 import { plannedDates } from "../../lib/checklist-schedule.ts";
 import { addDays, isDate, minutesBetween, normDT, type Calendar } from "./time.ts";
@@ -98,6 +99,29 @@ export async function saveChecklistTask(ctx: Ctx, d: Record<string, unknown>) {
   return { task: pub("Checklist_Tasks", rec), created: gen.created };
 }
 
+/**
+ * Delete ONE checklist task: it is archived (it can be brought back from the "Deleted" list) and its unfinished entries are cancelled, today's and overdue ones too.
+ * Entries already ticked stay as history. Nothing else is touched.
+ */
+export async function deleteChecklistTask(ctx: Ctx, d: Record<string, unknown>) {
+  const t = (await ctx.tx.rows("Checklist_Tasks")).find((x) => x.ctId === str(d.ctId));
+  require_(t, "Unknown checklist task");
+  require_(t.status !== "Archived", "This task is already deleted");
+  // people with the delete right, and managers who hand out work (assign) for the people in their reach
+  if (!ctx.allow("checklist", "delete")) ctx.require("checklist", "assign", "You cannot delete checklist tasks");
+  if (t.doerId !== ctx.actorId) await ctx.requireInReach(String(t.doerId), "checklist");
+  let cancelled = 0, kept = 0;
+  for (const l of await ctx.tx.rows("Checklist_Log")) {
+    if (l.ctId !== t.ctId) continue;
+    if (l.status === "Pending") { l.status = "Cancelled"; l.updatedAt = ctx.clock.stamp; cancelled++; } else if (l.status === "Done") kept++;
+  }
+  const before = { status: t.status };
+  t.status = "Archived"; t.updatedAt = ctx.clock.stamp;
+  ctx.tx.audit("Checklist task deleted", "Checklist_Tasks", String(t.ctId), before, { title: t.title, doerId: t.doerId, entriesCancelled: cancelled, reason: str(d.reason).slice(0, 120) });
+  if (t.doerId !== ctx.actorId) ctx.notice({ userId: String(t.doerId), type: "checklist", title: `Checklist task removed: ${t.title}`, body: str(d.reason) || "It is no longer on your list.", link: "/flows/checklist" });
+  return { cancelled, kept };
+}
+
 const toIso = (v: string): string => {
   const s = v.trim();
   const m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(s);
@@ -163,7 +187,12 @@ export async function completeChecklist(ctx: Ctx, d: Record<string, unknown>) {
   const { entry, task } = await entryParts(ctx, str(d.clId));
   require_(entry.status === "Pending", entry.status === "Done" ? "This task is already done" : `This entry is ${String(entry.status).toLowerCase()}`);
   if (!(await canActOnChecklist(ctx, entry, task))) fail("FORBIDDEN", "This task belongs to someone else");
-  if (task.proof === "Y") require_(str(d.proof), "This task needs proof — paste a link or write a note");
+  // a DAILY task is ticked on its own day (or later); weekly / monthly / … and one-time tasks may be ticked ahead of time
+  if (String(entry.plannedDate) > ctx.clock.date) require_(String(task.freq) !== "D", `A daily task can only be ticked on its own day (${entry.plannedDate}) or later`);
+  // proof: a picture, a note or a link — at least one of them (when the task asks for proof)
+  const picture = d.proofImage === undefined || d.proofImage === "" ? "" : String(d.proofImage);
+  if (picture) require_(isJpeg(picture), "The picture could not be used. Choose a photo again (it is made small automatically).");
+  if (task.proof === "Y") require_(str(d.proof) || picture, "This task needs proof — upload a picture or write a note (at least one)");
   if (!d._bulk) {
     const fresh = await ctx.tx.freshRow("Checklist_Log", entry);
     require_(fresh && fresh.status === "Pending", "This task was just changed by someone else. Refresh to see it.");
@@ -174,9 +203,24 @@ export async function completeChecklist(ctx: Ctx, d: Record<string, unknown>) {
   const owner = checklistOwner({ doerId: String(entry.doerId), plannedDate: String(entry.plannedDate), status: "Pending" }, { backupId: String(task.backupId) }, await absenceRows(ctx), ctx.clock.date).userId;
   const onBehalf = ctx.actorId !== entry.doerId && ctx.actorId !== owner;
   entry.status = "Done"; entry.actual = actual; entry.doneBy = onBehalf ? String(entry.doerId) : ctx.actorId; entry.proof = str(d.proof); entry.remarks = str(d.remarks); entry.updatedAt = ctx.clock.stamp;
+  if (picture) {
+    const pr = ctx.tx.insert("Checklist_Proofs", { proofId: newId("CPR"), clId: String(entry.clId), userId: ctx.actorId, createdAt: ctx.clock.stamp, image: picture });
+    entry.proofImg = String(pr.proofId);
+  }
   if (onBehalf) entry.remarks = `${entry.remarks ? entry.remarks + " · " : ""}ticked by ${String(ctx.actor.name)}`;
   if (!d._bulk) ctx.tx.audit("Checklist done", "Checklist_Log", String(entry.clId), null, { task: task.title, planned: entry.plannedDate, actual });
   return pub("Checklist_Log", entry);
+}
+
+/** The proof picture of one entry — for the person who did it, their managers, and the Super Admin. */
+export async function getChecklistProof(ctx: Ctx, d: Record<string, unknown>) {
+  const { entry } = await entryParts(ctx, str(d.clId));
+  require_(entry.proofImg, "No picture was uploaded for this entry");
+  const mine = entry.doerId === ctx.actorId || entry.doneBy === ctx.actorId;
+  if (!mine && !(await ctx.manages(String(entry.doerId), "checklist"))) fail("FORBIDDEN", "You cannot see this proof");
+  const p = (await ctx.tx.rows("Checklist_Proofs")).find((x) => x.proofId === entry.proofImg);
+  require_(p, "The picture is not available");
+  return { proofId: p.proofId, image: p.image, uploadedAt: p.createdAt };
 }
 
 /** "Tick everything for today": tasks that need proof are left for the person to do one by one. */

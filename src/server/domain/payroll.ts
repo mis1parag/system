@@ -86,7 +86,7 @@ export async function getSlip(ctx: Ctx, d: Record<string, unknown>) {
 export async function slipDoc(ctx: Ctx, s: Rec) {
   const user = await ctx.user(String(s.userId));
   const det = (await ctx.tx.rows("Employee_Details")).find((x) => x.userId === s.userId);
-  return { slip: view(s), employee: { userId: s.userId, name: user?.name ?? "", empCode: user?.empCode ?? "", department: user?.department ?? "", designation: det?.designation ?? "", joinDate: det?.joinDate ?? "" }, company: ctx.setting("COMPANY_NAME", "MIDAP") };
+  return { slip: view(s), employee: { userId: s.userId, name: user?.name ?? "", empCode: user?.empCode ?? "", department: user?.department ?? "", designation: det?.designation ?? "", joinDate: det?.joinDate ?? "" }, company: ctx.setting("COMPANY_NAME", "Parag Unify Crafts") };
 }
 
 export async function saveSlip(ctx: Ctx, d: Record<string, unknown>) {

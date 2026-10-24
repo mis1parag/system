@@ -48,12 +48,26 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-primary/5 px-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border bg-card p-6 shadow-sm">
+    <main className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
+      <aside className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-[#1e1b4b] via-[#3730a3] to-[#6d28d9] p-10 text-white lg:flex">
+        <div className="absolute -right-24 -top-24 size-80 rounded-full bg-white/10 blur-2xl" aria-hidden />
+        <div className="absolute -bottom-32 -left-16 size-96 rounded-full bg-fuchsia-400/20 blur-3xl" aria-hidden />
+        <div className="relative flex items-center gap-3"><span className="inline-flex size-11 items-center justify-center rounded-xl bg-white/15 text-xl font-bold ring-1 ring-white/30">P</span><span className="text-lg font-semibold tracking-tight">Parag Unify Crafts</span></div>
+        <div className="relative max-w-md">
+          <h2 className="text-4xl font-semibold leading-tight tracking-tight">One panel for the whole team.</h2>
+          <p className="mt-3 text-base text-white/80">Tasks, daily checklists, attendance and salary slips — in one place, for everyone from the office to the warehouse.</p>
+          <ul className="mt-6 grid gap-2 text-sm text-white/85">
+            {["Process tracking (FMS) with planned vs actual time", "Daily, weekly and one-time checklists", "Check-in / check-out with approvals", "Salary slips, only for you"].map((t) => <li key={t} className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-white/70" />{t}</li>)}
+          </ul>
+        </div>
+        <div className="relative text-xs text-white/60">© Parag Unify Crafts</div>
+      </aside>
+      <section className="flex items-center justify-center bg-gradient-to-b from-[#eef2ff] to-white px-4 py-10">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border bg-card p-6 shadow-lg shadow-indigo-100">
         <div className="mb-6">
-          <div className="inline-flex size-11 items-center justify-center rounded-xl bg-primary text-lg font-bold text-primary-foreground">M</div>
-          <h1 className="mt-3 text-xl font-semibold tracking-tight">MIDAP FMS</h1>
-          <p className="text-sm text-muted-foreground">Flow Management System</p>
+          <div className="inline-flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#4f46e5] to-[#7c3aed] text-lg font-bold text-white shadow-sm lg:hidden">P</div>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight lg:mt-0">Welcome back</h1>
+          <p className="text-sm text-muted-foreground">Sign in to the Parag Unify Crafts panel</p>
         </div>
         {sheet && !sheet.ok && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800"><b>Cannot reach the Google Sheet.</b> {sheet.error} <a href="/setup" className="underline">Check setup</a></p>}
         {sheet?.ok && !sheet.hasUsers && <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">No users yet. <a href="/setup" className="font-medium underline">Run first-time setup</a></p>}
@@ -85,6 +99,7 @@ export default function LoginPage() {
           {google && !showPin && <button type="button" onClick={() => setShowPin(true)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Super Admin PIN sign-in</button>}
         </div>
       </form>
+      </section>
     </main>
   );
 }

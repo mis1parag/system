@@ -66,7 +66,27 @@ export async function checkOut(ctx: Ctx, d: Record<string, unknown>) {
   return pub("Attendance", rec);
 }
 
-/** "I forgot to check out": a person closes their own punch from an earlier day by giving the time they left. Kept in the audit log; a manager can still correct it. */
+/** People who may decide about this person's attendance: the reporting manager, the Super Admin, and people who approve attendance inside their reach. */
+export async function attendanceApprovers(ctx: Ctx, userId: string): Promise<string[]> {
+  const users = await ctx.tx.rows("Users");
+  const out = new Set<string>();
+  const person = users.find((u) => u.userId === userId);
+  if (person?.managerId) out.add(String(person.managerId));
+  for (const u of users.filter((x) => x.status === "Active" && x.deleted !== "Y" && x.role !== "STAFF")) {
+    if (u.role === "SUPER_ADMIN") { out.add(String(u.userId)); continue; }
+    const perms = ctx.permsOf(u);
+    if (!allows(perms, "attendance", "approve")) continue;
+    const r = reachOf({ userId: String(u.userId), role: String(u.role), department: String(u.department ?? "") }, users as never, scopeOfGrant(perms, "attendance"));
+    if (r.all || r.ids.has(userId)) out.add(String(u.userId));
+  }
+  out.delete(userId);
+  return [...out];
+}
+
+/**
+ * "I forgot to check out": the person says when they left. It is NOT marked yet — it goes to their reporting manager (or the Super Admin / an attendance approver) first,
+ * and the day's check-out is written only when it is approved. Until then the punch stays open and the day shows no hours.
+ */
 export async function closeMyPunch(ctx: Ctx, d: Record<string, unknown>) {
   const r = alive(await ctx.tx.rows("Attendance")).find((x) => x.attId === str(d.attId));
   require_(r && r.userId === ctx.actorId, "That punch is not yours");
@@ -76,10 +96,39 @@ export async function closeMyPunch(ctx: Ctx, d: Record<string, unknown>) {
   require_(isTime(d.time), "Enter the time you left (for example 18:05)");
   const out = `${r.date} ${str(d.time)}`;
   require_(out > String(r.checkIn), `The check-out must be after the check-in (${String(r.checkIn).slice(11, 16)})`);
-  r.checkOut = out;
-  r.note = [r.note, "check-out entered later by the person"].filter(Boolean).join(" · ").slice(0, 200);
-  ctx.tx.audit("Check-out entered later", "Attendance", String(r.attId), { checkOut: "" }, { checkOut: out });
-  return pub("Attendance", r);
+  const reqs = await ctx.tx.rows("Requests");
+  require_(!reqs.some((q) => q.kind === "checkout" && q.taskId === r.attId && q.status === "Pending"), "You have already asked for this — it is waiting for approval");
+  const req = ctx.tx.insert("Requests", {
+    requestId: newId("REQ"), taskId: String(r.attId), itemId: "", flowId: "", requestedBy: ctx.actorId, newPlanned: out, reason: str(d.reason).slice(0, 300) || "Forgot to check out",
+    status: "Pending", decidedBy: "", decidedAt: "", note: "", createdAt: ctx.clock.stamp, kind: "checkout",
+  });
+  ctx.tx.audit("Late check-out requested", "Requests", String(req.requestId), { checkOut: "" }, { date: r.date, checkOut: out });
+  const approvers = await attendanceApprovers(ctx, ctx.actorId);
+  for (const u of approvers) ctx.notice({ userId: u, type: "request", title: `${ctx.actor.name} forgot to check out on ${r.date}`, body: `Says they left at ${str(d.time)}. Approve to mark the day.`, link: "/flows/approvals", self: true });
+  if (!approvers.length) ctx.warnings.push("Nobody is set to approve this yet — ask the Super Admin to set your reporting manager.");
+  return { pending: true, requestId: req.requestId, attendance: pub("Attendance", r) };
+}
+
+/** Called by decideRequest for a request of kind "checkout": the check-out is written (or not) by the person who decides. */
+export async function decideCheckoutRequest(ctx: Ctx, req: Rec, d: Record<string, unknown>) {
+  const person = String(req.requestedBy);
+  if (!(await attendanceApprovers(ctx, person)).includes(ctx.actorId)) fail("FORBIDDEN", "Only the person's reporting manager, the Super Admin or someone who approves attendance can decide this");
+  const row = alive(await ctx.tx.rows("Attendance")).find((x) => x.attId === req.taskId);
+  const approve = d.approve === true;
+  if (approve) {
+    require_(row, "That attendance entry no longer exists");
+    require_(!row.checkOut, "That punch has been closed in the meantime");
+    require_(String(req.newPlanned) > String(row.checkIn), "The check-out must be after the check-in");
+  }
+  req.status = approve ? "Approved" : "Rejected";
+  req.decidedBy = ctx.actorId; req.decidedAt = ctx.clock.stamp; req.note = str(d.note);
+  if (approve && row) {
+    row.checkOut = req.newPlanned;
+    row.note = [row.note, `check-out approved by ${ctx.actor.name}`].filter(Boolean).join(" · ").slice(0, 200);
+  }
+  ctx.tx.audit(approve ? "Late check-out approved" : "Late check-out rejected", "Requests", String(req.requestId), null, { person, date: row?.date, checkOut: req.newPlanned, note: req.note });
+  ctx.notice({ userId: person, type: "request_decided", title: `Your check-out for ${row?.date ?? "that day"} was ${approve ? "approved" : "declined"}`, body: approve ? `Marked ${String(req.newPlanned).slice(11, 16)}${req.note ? `. ${req.note}` : ""}` : `The day stays without a check-out${req.note ? `. ${req.note}` : ""}. Ask your manager to correct it.`, link: "/flows/attendance", self: true });
+  return pub("Requests", req);
 }
 
 /** Office kiosk (an admin signed in on the reception PC): the person types or scans their Employee ID; the same tap checks them in, or out if they are already in. */

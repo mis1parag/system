@@ -29,7 +29,7 @@ import { deleteUser, recordExit, reinstateUser, setUserStatus } from "./domain/e
 import { adminChecks, adminEditRow, adminRows, adminSetDeleted, adminTables, deleteAnnouncement, listAnnouncements, saveAnnouncement } from "./domain/admin-tools.ts";
 import { auditLog, getFlowData, getItemDetail, logExport, markNotificationsRead, saveSettings, searchEntries } from "./domain/read.ts";
 import { cancelLeave, checkIn, checkOut, decideLeave, deleteAttendance, getPunchPhoto, importAttendance, importLeaves, kioskPunch, closeMyPunch, markAttendance, requestLeave } from "./domain/attendance.ts";
-import { bulkAddChecklistTasks, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
+import { bulkAddChecklistTasks, deleteChecklistTask, getChecklistProof, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
 import { deliver, deliveryFromEnv, type DeliveryConfig } from "./domain/notify.ts";
 import { previewRemoval, removeChecklistTasks, removeFlowEntries, restoreFlowEntries } from "./domain/bulk-remove.ts";
 import { decideDevice, listDevices, myDevices, registerDevice, saveAttExempt } from "./domain/devices.ts";
@@ -86,6 +86,8 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     moveWork: { roles: ALL, fn: moveWork },
     // checklist
     saveChecklistTask: { roles: ALL, fn: saveChecklistTask },
+    getChecklistProof: { roles: ALL, perm: ["checklist", "view"], read: true, fn: getChecklistProof },
+    deleteChecklistTask: { roles: ALL, perm: ["checklist", "view"], fn: deleteChecklistTask }, // the right to delete is checked inside
     bulkAddChecklistTasks: { roles: ALL, perm: ["checklist", "create"], fn: bulkAddChecklistTasks },
     generateChecklist: { roles: ALL, perm: ["checklist", "manage"], fn: generateChecklistAction },
     completeChecklist: { roles: ALL, perm: ["checklist", "edit"], fn: completeChecklist },
@@ -237,7 +239,7 @@ async function runActionNow(db: Db, actorId: string, action: string, data: Recor
 
 export async function sendOutbox(ctx: Ctx, cfg: DeliveryConfig, now?: Date) {
   const { Users } = await ctx.db.load(["Users"]);
-  const r = await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "MIDAP"));
+  const r = await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "Parag Unify Crafts"));
   if (r.errors.length) ctx.warnings.push(...r.errors.slice(0, 3).map((e) => `Could not send: ${e}`));
   if (ctx.mailIds.length) {
     const m = await processMailQueue(ctx.db, cfg, { ids: ctx.mailIds, now });

@@ -7,9 +7,9 @@ const bodyFont = Inter({ variable: "--font-body", subsets: ["latin"], display: "
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "MIDAP FMS",
-  description: "Flow Management System — step-by-step process tracking with planned vs actual time, delays and backups",
-  applicationName: "MIDAP FMS",
+  title: "Parag Unify Crafts Panel",
+  description: "Parag Unify Crafts — one panel for tasks, checklists, attendance and salary slips",
+  applicationName: "Parag Unify Crafts Panel",
 };
 
 export const viewport: Viewport = {

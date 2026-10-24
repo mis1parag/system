@@ -4,6 +4,7 @@ import { effectiveAssignee } from "../../lib/flow-shared.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
 import { decideChecklistTime } from "./checklist-time.ts";
+import { decideCheckoutRequest } from "./attendance.ts";
 import { allows, reachOf, scopeOfGrant } from "../../lib/permissions.ts";
 import { calendarFor, planTasks, refreshItemStatus } from "./engine.ts";
 import { coerceField, parseData } from "./entries.ts";
@@ -145,6 +146,7 @@ export async function decideRequest(ctx: Ctx, d: Record<string, unknown>) {
   require_(r, "Unknown request");
   require_(r.status === "Pending", `This request was already ${String(r.status).toLowerCase()}`);
   if (r.kind === "checklist") return decideChecklistTime(ctx, r, d);
+  if (r.kind === "checkout") return decideCheckoutRequest(ctx, r, d);
   ctx.require("fms", "view", "You do not have access to this");
   const { task, item, flow, step } = await parts(ctx, String(r.taskId));
   const allowed = (await approversFor(ctx, task, step)).includes(ctx.actorId);

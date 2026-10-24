@@ -21,8 +21,12 @@ export interface SheetsClient {
   batchGet(ranges: string[]): Promise<Cell[][][]>;
   /** Append rows below the table in `range`; returns the 1-based row number of the first appended row. */
   append(range: string, rows: Cell[][]): Promise<number>;
-  batchUpdate(data: { range: string; values: Cell[][] }[]): Promise<void>;
-  /** Header styling: bold, dark background, frozen first row. */
+  batchUpdate(data: { range: string; values: Cell[][] }[], opts?: { formulas?: boolean }): Promise<void>;
+  /** Raw layout requests (colours, widths, filters…) — see sheets/format.ts. */
+  formatBatch(requests: unknown[]): Promise<void>;
+  /** Banded (zebra) ranges that already exist. */
+  bandedRanges(): Promise<{ sheetId: number; bandedRangeId: number }[]>;
+  /** Header styling: bold dark text on a light background, frozen first row. */
   styleHeader(sheetId: number, columns: number): Promise<void>;
 }
 
@@ -139,9 +143,18 @@ export function createSheetsClient(cfg: SheetsConfig): SheetsClient {
       return Number(m[1]);
     },
 
-    async batchUpdate(data) {
+    async batchUpdate(data, opts) {
       if (!data.length) return;
-      await call("POST", `${root}/values:batchUpdate`, { valueInputOption: "RAW", data: data.map((d) => ({ range: d.range, majorDimension: "ROWS", values: d.values })) });
+      await call("POST", `${root}/values:batchUpdate`, { valueInputOption: opts?.formulas ? "USER_ENTERED" : "RAW", data: data.map((d) => ({ range: d.range, majorDimension: "ROWS", values: d.values })) });
+    },
+
+    async formatBatch(requests) {
+      if (requests.length) await call("POST", `${root}:batchUpdate`, { requests });
+    },
+
+    async bandedRanges() {
+      const r = await call<{ sheets?: { properties: { sheetId: number }; bandedRanges?: { bandedRangeId: number }[] }[] }>("GET", `${root}?fields=sheets(properties.sheetId,bandedRanges.bandedRangeId)`);
+      return (r.sheets ?? []).flatMap((x) => (x.bandedRanges ?? []).map((b) => ({ sheetId: x.properties.sheetId, bandedRangeId: b.bandedRangeId })));
     },
 
     async styleHeader(sheetId, columns) {
@@ -151,7 +164,7 @@ export function createSheetsClient(cfg: SheetsConfig): SheetsClient {
           {
             repeatCell: {
               range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: columns },
-              cell: { userEnteredFormat: { backgroundColor: { red: 0.12, green: 0.16, blue: 0.22 }, textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } } },
+              cell: { userEnteredFormat: { backgroundColor: { red: 0.9, green: 0.91, blue: 0.92 }, textFormat: { bold: true, foregroundColor: { red: 0.07, green: 0.09, blue: 0.15 } } } },
               fields: "userEnteredFormat(backgroundColor,textFormat)",
             },
           },

@@ -39,7 +39,8 @@ export function useDayState() {
   const tracked = !!me?.empCode || mine.some((r) => r.date >= addDaysStr(today, -45));
   const day = att.days(meId, today, today)[0];
   const todays = mine.filter((r) => r.date === today);
-  const stale = mine.filter((r) => !r.checkOut && r.date < today && r.date >= addDaysStr(today, -14)).sort((a, b) => a.date.localeCompare(b.date));
+  const asked = new Set((data?.requests ?? []).filter((q) => q.kind === "checkout" && q.status === "Pending").map((q) => q.taskId));
+  const stale = mine.filter((r) => !r.checkOut && r.date < today && r.date >= addDaysStr(today, -14) && !asked.has(r.attId)).sort((a, b) => a.date.localeCompare(b.date));
   const open = todays.find((r) => !r.checkOut);
   const kioskOnly = s.ATT_SELF_PUNCH === "N" && !allow("attendance", "manage");
   const workingDay = !!day && day.status !== "off" && day.status !== "holiday" && day.status !== "leave";
@@ -139,7 +140,7 @@ function ForgotCheckout() {
     setBusy(true); setErr("");
     const res = await call("closeMyPunch", { attId: r.attId, time });
     setBusy(false);
-    if (!res.ok) setErr(res.error || "Could not save"); else toast.success("Thanks — your check-out is saved");
+    if (!res.ok) setErr(res.error || "Could not save"); else toast.success("Sent for approval — your check-out is marked once your manager approves it");
   }
   const left = st.stale.length - 1;
   return (
@@ -147,7 +148,7 @@ function ForgotCheckout() {
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>You did not check out on {fmtDate(r.date, true)}</DialogTitle>
-          <DialogDescription>You checked in at {r.checkIn.slice(11)} and the day was never closed, so its hours are unknown. When did you leave?</DialogDescription>
+          <DialogDescription>You checked in at {r.checkIn.slice(11)} and the day was never closed, so its hours are unknown. When did you leave? Your manager has to approve it before it is marked.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
           <label className="text-sm font-medium" htmlFor="left-at">I left at</label>
@@ -155,7 +156,7 @@ function ForgotCheckout() {
           {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
           {left > 0 && <p className="text-xs text-muted-foreground">{left} more earlier day{left === 1 ? "" : "s"} to fill in after this.</p>}
         </div>
-        <DialogFooter><Button onClick={save} disabled={busy || !time}>{busy ? <Spinner /> : "Save check-out"}</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={busy || !time}>{busy ? <Spinner /> : "Send for approval"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

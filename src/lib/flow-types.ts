@@ -81,6 +81,8 @@ export type ChecklistStatus = "Pending" | "Done" | "Skipped" | "Cancelled";
 export interface ChecklistEntry {
   clId: string; ctId: string; doerId: string; plannedDate: string; status: ChecklistStatus; actual: string; doneBy: string; proof: string; remarks: string;
   remindedAt: string; createdAt: string; updatedAt: string; origDate: string; movedBy: string;
+  /** id of the proof picture, when one was uploaded */
+  proofImg?: string;
 }
 export interface Holiday { holidayId: string; date: string; label: string; flowId: string }
 export interface Absence { absenceId: string; userId: string; fromDate: string; toDate: string; backupUserId: string; reason: string; createdBy: string; createdAt: string }
@@ -114,6 +116,8 @@ export interface FlowBundle {
   attendance: AttendanceRow[]; leaves: LeaveRow[];
   /** What the signed-in person must do to check in: a camera photo, a registered laptop (unless excused). */
   attRules?: { cameraRequired: boolean; deviceCheck: boolean };
+  /** Checklist tasks that were deleted (for people who manage the checklist: they can bring one back). */
+  deletedChecklistTasks?: ChecklistTask[];
   settings: Record<string, string>;
   /** What the signed-in person may do, module by module (Super Admin: everything). A module that is missing is not theirs. */
   perms: PermSet;

@@ -119,7 +119,7 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
   const groups = useMemo(() => {
     const hasFlow = role === "SUPER_ADMIN" || (data?.flows ?? []).length > 0; // an FMS tab for somebody who has been given no FMS would only lead to an empty page
     const has = (m: ModuleId) => !!data?.perms?.[m]?.a.includes("view");
-    const allowed = (n: NavItem) => (n.href !== "/flows/kiosk" || !!data?.perms?.attendance?.a.includes("manage") || data?.settings?.ATT_SELF_PUNCH === "N") && (n.href !== "/flows/approvals" || (has("fms") && hasFlow) || has("checklist")) && (!(n.module === "fms" && n.href !== "/flows/search") || hasFlow) && (!n.module || !!data?.perms?.[n.module]?.a.includes(n.action ?? "view")) && (!n.reach || (data?.reach?.[n.module!]?.all ?? false) || (data?.reach?.[n.module!]?.ids.length ?? 0) > 1) && (!n.super || role === "SUPER_ADMIN");
+    const allowed = (n: NavItem) => (n.href !== "/flows/kiosk" || !!data?.perms?.attendance?.a.includes("manage") || data?.settings?.ATT_SELF_PUNCH === "N") && (n.href !== "/flows/approvals" || (has("fms") && hasFlow) || has("checklist") || has("attendance")) && (!(n.module === "fms" && n.href !== "/flows/search") || hasFlow) && (!n.module || !!data?.perms?.[n.module]?.a.includes(n.action ?? "view")) && (!n.reach || (data?.reach?.[n.module!]?.all ?? false) || (data?.reach?.[n.module!]?.ids.length ?? 0) > 1) && (!n.super || role === "SUPER_ADMIN");
     return GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   }, [role, data?.perms, data?.reach, data?.flows, data?.settings?.ATT_SELF_PUNCH]);
   const flat = useMemo(() => [...groups.flatMap((g) => g.items), ...FOOT], [groups]);
@@ -164,7 +164,7 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
   // a page the person was just given access to (a shared login, a new role): look again once before saying "no access"
   const askedAgain = useRef("");
   useEffect(() => { if (denied && askedAgain.current !== pathname) { askedAgain.current = pathname; refresh(); } }, [denied, pathname, refresh]);
-  const company = data?.settings?.COMPANY_NAME || "MIDAP";
+  const company = data?.settings?.COMPANY_NAME || "Parag Unify Crafts";
   const myCode = data?.users.find((u) => u.userId === data.me.userId)?.empCode ?? "";
 
   return (
@@ -175,7 +175,7 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex items-center gap-2.5 px-4 pb-3 pt-4">
           <div className="inline-flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white shadow-[0_1px_2px_rgba(99,91,255,0.4)]">{company.slice(0, 1)}</div>
-          <div className="min-w-0 flex-1"><div className="truncate text-[15px] font-semibold leading-tight text-foreground">{company}</div><div className="text-xs text-muted-foreground">Flow management</div></div>
+          <div className="min-w-0 flex-1"><div className="truncate text-[15px] font-semibold leading-tight text-foreground">{company}</div><div className="text-xs text-muted-foreground">Management panel</div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-2.5 pb-2" aria-label="Main">
           {groups.map((g) => (

@@ -161,9 +161,23 @@ const nob = (await call(PRIYA, "markAttendance", { userId: KUNAL, date: "2026-10
 ok(nob.ok && !nob.data.checkOut, "an old punch that was never closed");
 ok(!(await call(NIDHI, "closeMyPunch", { attId: nob.data.attId, time: "18:00" }, WED)).ok, "only the person can close their own punch");
 ok(!(await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "09:00" }, WED)).ok, "the check-out must be after the check-in");
-const cl2 = await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "18:05" }, WED);
-ok(cl2.ok && cl2.data.checkOut === "2026-10-02 18:05" && /entered later/.test(cl2.data.note), "the person enters the time they left");
-ok(!(await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "18:10" }, WED)).ok, "a closed punch cannot be changed again");
+const att = async () => (await call(boss, "getFlowData", {}, WED)).data.attendance.find((x) => x.attId === nob.data.attId);
+const cl2 = await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "18:05", reason: "left in a hurry" }, WED);
+ok(cl2.ok && cl2.data.pending === true && !(await att()).checkOut, "asking to close an old punch does NOT mark it — the check-out stays empty until it is approved");
+ok(!(await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "18:10" }, WED)).ok, "a second request while the first waits is refused");
+const rq = (await call(KUNAL, "getFlowData", {}, WED)).data.requests.find((r) => r.kind === "checkout" && r.status === "Pending");
+ok(rq && rq.newPlanned === "2026-10-02 18:05" && rq.taskId === nob.data.attId, "Kunal sees his request, and the manager gets it in Approvals");
+ok((await call(boss, "getFlowData", {}, WED)).data.requests.some((r) => r.requestId === rq.requestId) && (await call(boss, "getFlowData", {}, WED)).data.notifications.some((n) => /forgot to check out/.test(n.title)), "…the approver is notified");
+ok(!(await call(KUNAL, "decideRequest", { requestId: rq.requestId, approve: true }, WED)).ok && !(await call(NIDHI, "decideRequest", { requestId: rq.requestId, approve: true }, WED)).ok, "he cannot approve his own check-out, and neither can a colleague");
+const rj = await call(boss, "decideRequest", { requestId: rq.requestId, approve: false, note: "not sure you stayed" }, WED);
+ok(rj.ok && !(await att()).checkOut, "declined: the day stays without a check-out");
+const again = await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "18:10" }, WED);
+ok(again.ok && again.data.pending, "after a decline he may ask again");
+const rq2 = (await call(KUNAL, "getFlowData", {}, WED)).data.requests.find((r) => r.kind === "checkout" && r.status === "Pending");
+const ap = await call(boss, "decideRequest", { requestId: rq2.requestId, approve: true }, WED);
+ok(ap.ok && (await att()).checkOut === "2026-10-02 18:10" && /approved by/.test((await att()).note), "approved: only now the check-out is written (and the day counts)");
+ok(!(await call(boss, "decideRequest", { requestId: rq2.requestId, approve: true }, WED)).ok, "a request is decided only once");
+ok(!(await call(KUNAL, "closeMyPunch", { attId: nob.data.attId, time: "18:20" }, WED)).ok, "a closed punch cannot be changed again");
 ok(!(await call(boss, "saveSettings", { settings: { ATT_GATE: "sometimes" } }, WED)).ok && (await call(boss, "saveSettings", { settings: { ATT_GATE: "prompt", ATT_REMIND_CHECKIN: "09:30" } }, WED)).ok, "check-in screen settings are validated and can be changed");
 
 console.log(`\n${pass} passed, ${fail} failed`);

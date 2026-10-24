@@ -70,13 +70,16 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
   const recentReq = (r: Rec) => r.status === "Pending" || String(r.decidedAt).slice(0, 10) >= addDays(ctx.clock.date, -14);
   // "more time" for checklist tasks: the person who asked, their reporting manager, the Super Admin and people who manage that person's checklist
   const reachClReq = (r: Rec) => r.requestedBy === ctx.actorId || userById.get(String(r.requestedBy))?.managerId === ctx.actorId || ctx.isSuper || (ctx.allow("checklist", "manage") && (reach.checklist.all || reach.checklist.ids.has(String(r.requestedBy))));
-  const requests = t.Requests.filter((r) => (r.kind === "checklist" ? reachClReq(r) : has("fms") && vis.flowOk.has(String(r.flowId)) && !offFlows.has(String(r.flowId)) && reachReq(r)) && recentReq(r));
+  const reachCoReq = (r: Rec) => r.requestedBy === ctx.actorId || userById.get(String(r.requestedBy))?.managerId === ctx.actorId || ctx.isSuper || (ctx.allow("attendance", "approve") && (reach.attendance.all || reach.attendance.ids.has(String(r.requestedBy))));
+  const requests = t.Requests.filter((r) => (r.kind === "checkout" ? reachCoReq(r) : r.kind === "checklist" ? reachClReq(r) : has("fms") && vis.flowOk.has(String(r.flowId)) && !offFlows.has(String(r.flowId)) && reachReq(r)) && recentReq(r));
 
   // ---- notifications: only about modules the person can open
   const notes = t.Notifications.filter((n) => n.userId === ctx.actorId).filter((n) => { const m = moduleOfNotification(n as { link?: unknown; type?: unknown }); return !m || has(m); }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
   // ---- checklist
   const covered = new Set(t.Absences.filter((a) => a.deleted !== "Y" && a.backupUserId === ctx.actorId && String(a.toDate) >= addDays(ctx.clock.date, -70)).map((a) => String(a.userId)));
+  // tasks somebody deleted (not the ones kept only as history of the Drive import): only for people who manage the checklist, so they can bring one back
+  const deletedCl = has("checklist") && ctx.allow("checklist", "manage") ? t.Checklist_Tasks.filter((c) => c.status === "Archived" && c.createdBy !== "import" && c.kra !== "history from Drive" && (reach.checklist.all || reach.checklist.ids.has(String(c.doerId)))) : [];
   const clTasks = has("checklist") ? t.Checklist_Tasks.filter((c) => c.status !== "Archived" && (reach.checklist.all || reach.checklist.ids.has(String(c.doerId)) || c.backupId === ctx.actorId || covered.has(String(c.doerId)))) : [];
   const clIds = new Set(clTasks.map((c) => String(c.ctId)));
   const clSince = addDays(ctx.clock.date, -70);
@@ -126,7 +129,7 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
     tasks: tasks.map((x) => pub("Flow_Tasks", x)),
     requests: requests.map((r) => pub("Requests", r)),
     attendance: attendance.map((a) => pub("Attendance", a)), leaves: leaves.map((l) => pub("Leaves", l)),
-    checklistTasks: clTasks.map((c) => pub("Checklist_Tasks", c)), checklistLog: clLog.map((l) => pub("Checklist_Log", l)),
+    checklistTasks: clTasks.map((c) => pub("Checklist_Tasks", c)), deletedChecklistTasks: deletedCl.map((c) => pub("Checklist_Tasks", c)), checklistLog: clLog.map((l) => pub("Checklist_Log", l)),
     notifications: notes.slice(0, 60).map((n) => pub("Notifications", n)),
     unread: notes.filter((n) => !n.readAt).length,
     settings: Object.fromEntries(DEFAULT_SETTINGS.filter(([k]) => k !== "PERMISSIONS").map(([k]) => [k, ctx.settings[k]])),

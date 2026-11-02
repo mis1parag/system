@@ -3,6 +3,7 @@
  * sensible column widths, big technical columns (photos, hashes, encrypted values) folded away, and a "Guide" tab that explains every tab.
  * Pure functions that build Sheets API requests — nothing here talks to Google (tools/format-sheet.mjs does).
  */
+import { BRAND } from "../../lib/brand.ts";
 import { TABLES, TABLE_ORDER } from "./schema.ts";
 
 export type Group = "People" | "FMS" | "Checklist" | "Attendance" | "Salary" | "Tools" | "Rules";
@@ -96,7 +97,7 @@ export function tabRequests(sheetId: number, tab: string): unknown[] {
 }
 
 /** The text of the Guide tab (values and formulas); `ids` = sheetId of every tab. */
-export function guideRows(ids: Map<string, number>, company = "Parag Unify Crafts"): (string | number)[][] {
+export function guideRows(ids: Map<string, number>, company = BRAND): (string | number)[][] {
   const rows: (string | number)[][] = [
     [`${company} — data sheet guide`, "", "", "", ""],
     ["Ye sheet app ka database hai. Roz ka kaam app se hota hai; yahan data dekhne, filter karne aur export karne ke liye aao.", "", "", "", ""],

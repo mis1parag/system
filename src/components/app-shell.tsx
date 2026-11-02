@@ -16,6 +16,7 @@ import { useFlows } from "@/lib/flow-store";
 import { fmtDT } from "@/lib/dates";
 import type { Action, ModuleId } from "@/lib/permissions";
 import { ROLE_LABEL, type Role } from "@/lib/types";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 interface NavItem { href: string; label: string; short?: string; hint: string; icon: LucideIcon; /** shown only to people who have this module (and action) */ module?: ModuleId; action?: Action; /** shown when someone else is in reach of that module */ reach?: boolean; super?: boolean; badge?: "approvals" }
@@ -164,7 +165,7 @@ export function AppShell({ user, children }: { user: { userId: string; name: str
   // a page the person was just given access to (a shared login, a new role): look again once before saying "no access"
   const askedAgain = useRef("");
   useEffect(() => { if (denied && askedAgain.current !== pathname) { askedAgain.current = pathname; refresh(); } }, [denied, pathname, refresh]);
-  const company = data?.settings?.COMPANY_NAME || "Parag Unify Crafts";
+  const company = data?.settings?.COMPANY_NAME || BRAND;
   const myCode = data?.users.find((u) => u.userId === data.me.userId)?.empCode ?? "";
 
   return (

@@ -30,6 +30,7 @@ import { adminChecks, adminEditRow, adminRows, adminSetDeleted, adminTables, del
 import { auditLog, getFlowData, getItemDetail, logExport, markNotificationsRead, saveSettings, searchEntries } from "./domain/read.ts";
 import { cancelLeave, checkIn, checkOut, decideLeave, deleteAttendance, getPunchPhoto, importAttendance, importLeaves, kioskPunch, closeMyPunch, markAttendance, requestLeave } from "./domain/attendance.ts";
 import { bulkAddChecklistTasks, deleteChecklistTask, getChecklistProof, completeChecklist, completeChecklistMany, generateChecklistAction, reopenChecklist, saveChecklistTask, skipChecklist } from "./domain/checklist.ts";
+import { BRAND } from "../lib/brand.ts";
 import { deliver, deliveryFromEnv, type DeliveryConfig } from "./domain/notify.ts";
 import { previewRemoval, removeChecklistTasks, removeFlowEntries, restoreFlowEntries } from "./domain/bulk-remove.ts";
 import { decideDevice, listDevices, myDevices, registerDevice, saveAttExempt } from "./domain/devices.ts";
@@ -239,7 +240,7 @@ async function runActionNow(db: Db, actorId: string, action: string, data: Recor
 
 export async function sendOutbox(ctx: Ctx, cfg: DeliveryConfig, now?: Date) {
   const { Users } = await ctx.db.load(["Users"]);
-  const r = await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "Parag Unify Crafts"));
+  const r = await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", BRAND));
   if (r.errors.length) ctx.warnings.push(...r.errors.slice(0, 3).map((e) => `Could not send: ${e}`));
   if (ctx.mailIds.length) {
     const m = await processMailQueue(ctx.db, cfg, { ids: ctx.mailIds, now });

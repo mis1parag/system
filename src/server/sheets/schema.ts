@@ -3,6 +3,7 @@
  * Column = [recordKey, headerText, type]   s = text · n = number (blank → 0) · nn = number (blank → null)
  * Keep in sync with src/lib/flow-types.ts.
  */
+import { BRAND } from "../../lib/brand.ts";
 export type ColType = "s" | "n" | "nn";
 export type Col = [key: string, header: string, type: ColType];
 export interface TableDef {
@@ -264,7 +265,7 @@ export const TABLE_ORDER = ["Users", "Flows", "Flow_Items", "Flow_Tasks", "Comme
 
 /** [key, default, description] */
 export const DEFAULT_SETTINGS: [string, string, string][] = [
-  ["COMPANY_NAME", "Parag Unify Crafts", "Shown in the app header and notifications"],
+  ["COMPANY_NAME", BRAND, "Shown in the app header and notifications"],
   ["LEAVE_BLOCK_OVERDRAW", "N", "Y = a leave request that goes beyond the balance is refused (N = it is allowed with a warning)"],
   ["TIMEZONE", "Asia/Kolkata", "IANA timezone for 'now' and 'today' (planned / actual times)"],
   ["REMINDER_MINUTES", "60", "Remind the doer this many minutes before a step is due (a step can override it)"],

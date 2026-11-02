@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { BRAND } from "@/lib/brand";
 import { Geist_Mono, Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -7,9 +8,9 @@ const bodyFont = Inter({ variable: "--font-body", subsets: ["latin"], display: "
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Parag Unify Crafts Panel",
-  description: "Parag Unify Crafts — one panel for tasks, checklists, attendance and salary slips",
-  applicationName: "Parag Unify Crafts Panel",
+  title: `${BRAND} Panel`,
+  description: `${BRAND} — one panel for tasks, checklists, attendance and salary slips`,
+  applicationName: `${BRAND} Panel`,
 };
 
 export const viewport: Viewport = {

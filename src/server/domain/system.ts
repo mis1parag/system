@@ -2,6 +2,7 @@
 import type { Flow } from "../../lib/flow-types.ts";
 import { Db, MidapError, newId, require_ } from "./../sheets/db.ts";
 import { hashPin } from "./auth.ts";
+import { BRAND } from "../../lib/brand.ts";
 import { loadSettings, makeCtx } from "./ctx.ts";
 import { processMailQueue } from "./mail-log.ts";
 import { tick, type TickResult } from "./cron.ts";
@@ -55,7 +56,7 @@ export async function runTick(db: Db, cfg: DeliveryConfig = deliveryFromEnv(), n
   let errors: string[] = [];
   if (ctx.outbox.length) {
     const { Users } = await db.load(["Users"]);
-    errors = (await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", "Parag Unify Crafts"))).errors;
+    errors = (await deliver(cfg, ctx.deliverable(Users), Users, ctx.setting("COMPANY_NAME", BRAND))).errors;
   }
   // salary-slip e-mails that are due again (failed earlier, or waiting for e-mail to be set up)
   const mails = await processMailQueue(db, cfg, { now }).catch((e) => ({ sent: 0, failed: 0, waiting: 0, notes: [String(e?.message ?? e)] }));

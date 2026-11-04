@@ -322,6 +322,11 @@ ok(!(await bundle(PAY)).items.some((i) => i.itemId === te.data.itemId) && !(awai
 ok(!(await call(boss, "createEntry", { flowId: two.data.flowId, data: { po: "T-2", due: "2026-10-12" }, assignees: { s1: "USR-NOBODY" } })).ok, "an unknown person for a step is refused");
 
 section("leaderboard");
+// work for the task board: Rohan finishes his daily task today, Asha does not
+await call(boss, "saveChecklistTask", { title: "LB task Rohan", doerId: ROHAN, freq: "D", startDate: TODAY });
+await call(boss, "saveChecklistTask", { title: "LB task Asha", doerId: ASHA, freq: "D", startDate: TODAY });
+const lbEntry = (await bundle(ROHAN)).checklistLog.find((l) => l.doerId === ROHAN && l.plannedDate === TODAY && l.status === "Pending");
+await call(ROHAN, "completeChecklist", { clId: lbEntry.clId });
 const lb = await call(ASHA, "getLeaderboard", { month: "2026-10" });
 ok(lb.ok && lb.data.board.length >= 5, `anybody can read it: ${lb.error ?? ""}`);
 const rowR = lb.data.board.find((r) => r.userId === ROHAN);
@@ -331,6 +336,16 @@ ok(lb.data.board.filter((r) => r.rank !== null).every((r, i, a) => i === 0 || a[
 const empty = await call(ASHA, "getLeaderboard", { month: "2024-01" });
 ok(empty.ok && empty.data.board.every((r) => r.rank === null), "a month with nothing to measure ranks nobody");
 ok(!(await call(ASHA, "getLeaderboard", { month: "2026-13" })).ok, "a bad month is refused");
+const byAtt = lb.data.board.filter((r) => r.attRank !== null), byTask = lb.data.board.filter((r) => r.taskRank !== null);
+ok(byAtt.length > 0 && lb.data.board.every((r) => (r.days > 0) === (r.attRank !== null)), "the ATTENDANCE board ranks everybody who has days that counted, and nobody else");
+ok(byTask.length >= 2 && lb.data.board.every((r) => (r.dueAll > 0) === (r.taskRank !== null)), "the TASK board ranks everybody who had work due, and nobody else");
+const attSorted = [...byAtt].sort((x, y) => x.attRank - y.attRank);
+ok(attSorted[0].attRank === 1 && attSorted.every((r, i) => i === 0 || attSorted[i - 1].arrivalPct >= r.arrivalPct), "attendance ranks follow the on-time share (best first)");
+const taskSorted = [...byTask].sort((x, y) => x.taskRank - y.taskRank);
+ok(taskSorted[0].userId === ROHAN && lb.data.board.find((r) => r.userId === ASHA).taskRank > 1, "Rohan (finished on time) is above Asha (did nothing) on the task board");
+ok(taskSorted[0].taskRank === 1 && taskSorted.every((r, i) => i === 0 || taskSorted[i - 1].workPct >= r.workPct), "task ranks follow the share of work done on time (best first)");
+ok(byAtt.every((r) => typeof r.absent === "number" && typeof r.hours === "number") && byTask.every((r) => r.donePct !== null && r.donePct >= 0 && r.donePct <= 100), "the extra columns (absent days, hours, % done) are there");
+ok(empty.data.board.every((r) => r.attRank === null && r.taskRank === null), "an empty month ranks nobody on either board");
 
 // =============================================================== exit, switch off, delete
 section("exit flow: only Admin / Super Admin, with a last working day");

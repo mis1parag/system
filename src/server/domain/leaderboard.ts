@@ -17,6 +17,9 @@ export interface BoardRow {
   userId: string; name: string; department: string; rank: number | null;
   days: number; onTime: number; late: number; arrivalPct: number | null;
   fmsDue: number; fmsDone: number; fmsOnTime: number; clDue: number; clDone: number; clOnTime: number; workPct: number | null; score: number | null;
+  /** the two separate leaderboards: by attendance (arrival) and by tasks (finished on time) */
+  absent: number; hours: number; doneAll: number; dueAll: number; donePct: number | null;
+  attRank: number | null; taskRank: number | null;
 }
 
 export async function getLeaderboard(ctx: Ctx, d: Record<string, unknown>) {
@@ -55,8 +58,18 @@ export async function getLeaderboard(ctx: Ctx, d: Record<string, unknown>) {
     const arrivalPct = days.length ? Math.round((onTime / days.length) * 100) : null;
     const workPct = due ? Math.round(((fmsOnTime + clOnTime) / due) * 100) : null;
     const score = arrivalPct === null && workPct === null ? null : arrivalPct === null ? workPct : workPct === null ? arrivalPct : Math.round(arrivalPct * 0.4 + workPct * 0.6);
-    return { userId: id, name: String(u.name), department: String(u.department ?? ""), rank: null, days: days.length, onTime, late, arrivalPct, fmsDue: f.length, fmsDone: fmsDone.length, fmsOnTime, clDue: c.length, clDone: clDone.length, clOnTime, workPct, score };
+    return { userId: id, name: String(u.name), department: String(u.department ?? ""), rank: null, days: days.length, onTime, late, arrivalPct, fmsDue: f.length, fmsDone: fmsDone.length, fmsOnTime, clDue: c.length, clDone: clDone.length, clOnTime, workPct, score,
+      absent: days.filter((x) => x.status === "absent").length, hours: Math.round(days.reduce((a, x) => a + (x.hours || 0), 0) * 10) / 10,
+      doneAll: fmsDone.length + clDone.length, dueAll: due, donePct: due ? Math.round(((fmsDone.length + clDone.length) / due) * 100) : null, attRank: null, taskRank: null };
   });
+  const place = (key: "attRank" | "taskRank", eligible: (r: BoardRow) => boolean, cmp: (a: BoardRow, b: BoardRow) => number, same: (a: BoardRow, b: BoardRow) => boolean) => {
+    const list = rows.filter(eligible).sort((a, b) => cmp(a, b) || a.name.localeCompare(b.name));
+    list.forEach((r, i) => { r[key] = i > 0 && same(list[i - 1], r) ? list[i - 1][key] : i + 1; });
+  };
+  // attendance: most days on time (as a share of the days that counted); then fewer late days, fewer absences, more hours
+  place("attRank", (r) => r.days > 0, (a, b) => (b.arrivalPct ?? 0) - (a.arrivalPct ?? 0) || b.onTime - a.onTime || a.late - b.late || a.absent - b.absent || b.hours - a.hours, (a, b) => a.arrivalPct === b.arrivalPct && a.onTime === b.onTime && a.late === b.late && a.absent === b.absent);
+  // tasks: most work finished on time (as a share of what was due); then more finished, then more due
+  place("taskRank", (r) => r.dueAll > 0, (a, b) => (b.workPct ?? 0) - (a.workPct ?? 0) || b.doneAll - a.doneAll || b.dueAll - a.dueAll, (a, b) => a.workPct === b.workPct && a.doneAll === b.doneAll);
   const ranked = rows.filter((r) => r.score !== null && (r.days > 0 || r.fmsDue + r.clDue > 0))
     .sort((a, b) => (b.score! - a.score!) || ((b.fmsDone + b.clDone) - (a.fmsDone + a.clDone)) || (b.onTime - a.onTime) || a.name.localeCompare(b.name));
   let last = -1, lastRank = 0;

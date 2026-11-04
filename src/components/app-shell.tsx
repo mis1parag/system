@@ -44,7 +44,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/flows/panel", label: "Home", short: "Home", hint: "Today at a glance: what is late, what needs a decision", icon: LayoutDashboardIcon },
       { href: "/flows/kiosk", label: "Attendance kiosk", short: "Kiosk", hint: "Check in / out at the office kiosk (reception runs it; everyone can see their ID and today)", icon: ScanFaceIcon, module: "attendance" },
-      { href: "/flows/leaderboard", label: "Leaderboard", short: "Leaders", hint: "This month: who came on time and finished their work", icon: AwardIcon },
+      { href: "/flows/leaderboard", label: "Leaderboard", short: "Leaders", hint: "This month: two rankings — attendance and tasks", icon: AwardIcon },
       { href: "/flows/tasks", label: "FMS tasks", short: "FMS tasks", hint: "Steps of your FMS that are waiting for you", icon: ListChecksIcon, module: "fms" },
       { href: "/flows/checklist", label: "Checklist", short: "Checklist", hint: "Daily, weekly, monthly and one-time tasks — tick them off", icon: ClipboardCheckIcon, module: "checklist" },
       { href: "/flows/attendance", label: "Attendance", short: "Attendance", hint: "Check in and out, your month, apply for leave", icon: CalendarCheck2Icon, module: "attendance" },

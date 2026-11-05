@@ -207,8 +207,7 @@ function Report({ onOpen }: { onOpen: (id: string) => void }) {
     { id: "late", label: "Late", sort: (x) => x.r.late, render: (x) => <span className="tabular-nums">{x.r.late}</span>, csv: (x) => x.r.late, align: "right" },
     { id: "early", label: "Early", hidden: true, sort: (x) => x.r.early, render: (x) => <span className="tabular-nums">{x.r.early}</span>, csv: (x) => x.r.early, align: "right" },
     { id: "ot", label: "OT", hidden: true, sort: (x) => x.r.overtime, render: (x) => <span className="tabular-nums">{x.r.overtime}</span>, csv: (x) => x.r.overtime, align: "right" },
-    { id: "reqh", label: "Working hours", sort: (x) => x.r.reqHours, render: (x) => <span className="tabular-nums">{x.r.reqHours.toFixed(1)}</span>, csv: (x) => x.r.reqHours, align: "right" },
-    { id: "hours", label: "Worked hours", sort: (x) => x.r.workedHours, render: (x) => <span className={cn("tabular-nums", x.r.reqHours > 0 && x.r.workedHours < x.r.reqHours && "text-amber-700")}>{x.r.workedHours.toFixed(1)}</span>, csv: (x) => x.r.workedHours, align: "right" },
+    { id: "hours", label: "Hours (worked/working)", sort: (x) => x.r.workedHours, render: (x) => <span className={cn("tabular-nums", x.r.reqHours > 0 && x.r.workedHours < x.r.reqHours && "text-amber-700")} title="Hours worked / working hours required this month">{hrsPair(x.r)}</span>, csv: (x) => hrsPair(x.r), align: "right" },
     { id: "oth", label: "Overtime hours", sort: (x) => x.r.overtimeHours, render: (x) => <span className={cn("tabular-nums", x.r.overtimeHours > 0 && "font-medium text-emerald-700")}>{x.r.overtimeHours ? x.r.overtimeHours.toFixed(1) : "—"}</span>, csv: (x) => x.r.overtimeHours, align: "right" },
     { id: "ontime", label: "On-time arrival", sort: (x) => x.r.onTimePct, render: (x) => <span className="tabular-nums">{x.r.present + x.r.half ? pct1(x.r.onTimePct) : "—"}</span>, csv: (x) => x.r.onTimePct },
   ];
@@ -220,6 +219,10 @@ function Report({ onOpen }: { onOpen: (id: string) => void }) {
     </>
   );
 }
+
+/** "224.5/234": hours worked / working hours required */
+const h1 = (n: number) => String(Math.round(n * 10) / 10);
+const hrsPair = (r: { workedHours: number; reqHours: number }) => `${h1(r.workedHours)}/${h1(r.reqHours)}`;
 
 function Leave() {
   const { data, meId, isSuper, userName, call, today, can, inReach } = useFlows();

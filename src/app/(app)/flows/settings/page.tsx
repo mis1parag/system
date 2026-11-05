@@ -74,6 +74,17 @@ export default function SettingsPage() {
             </Field>
           </div>
         </Section>
+        <Section title="Salary rules" hint="Salary is always worked out on a fixed 30-day month: per-day salary = monthly salary ÷ 30, in every month.">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Required hours per working day" hint="0 = use the normal hours above. Overtime starts beyond this."><Input inputMode="decimal" value={v.PAY_REQ_HOURS ?? ""} onChange={set("PAY_REQ_HOURS")} /></Field>
+            <Field label="Overtime rate (× hourly rate)" hint="Hourly rate = per-day salary ÷ required hours. 1 = same rate, 1.5 = time and a half, 0 = shown but not paid."><Input inputMode="decimal" value={v.PAY_OT_MULTIPLIER ?? ""} onChange={set("PAY_OT_MULTIPLIER")} /></Field>
+            <Field label="Overtime counts after (minutes)" hint="Extra time shorter than this is ignored."><Input inputMode="numeric" value={v.PAY_OT_MIN_MINUTES ?? ""} onChange={set("PAY_OT_MIN_MINUTES")} /></Field>
+            <Field label="Deduction for short days" hint="Standard: half day = half a day's salary, absent = a full day. Proportional: deduct for the hours not worked.">
+              <NativeSelect value={v.PAY_PRORATE ?? "N"} onChange={set("PAY_PRORATE")}><option value="N">Standard (half / full day)</option><option value="Y">In proportion to hours worked</option></NativeSelect>
+            </Field>
+            <Field label="Late arrivals per half-day cut" hint="0 = late arrivals never cost pay. 3 = every 3 late marks cost half a day." className="col-span-2"><Input inputMode="numeric" value={v.PAY_LATE_MARKS ?? ""} onChange={set("PAY_LATE_MARKS")} /></Field>
+          </div>
+        </Section>
         <Button className="w-fit" onClick={save} disabled={busy}>{busy ? <Spinner /> : "Save settings"}</Button>
         <p className="text-xs text-muted-foreground">Reminders, escalations, repeating entries and the morning summary run when the scheduler calls <code>/api/cron/tick</code> (set up in Vercel / any cron service) and also whenever someone has the app open.</p>
       </div>

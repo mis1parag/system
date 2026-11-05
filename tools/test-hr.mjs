@@ -9,6 +9,7 @@ import { runSetup } from "../src/server/domain/system.ts";
 import { calFrom, leaveDays, leaveDaysInYear, yearBalance } from "../src/lib/attendance.ts";
 import { runTick } from "../src/server/domain/system.ts";
 import { processMailQueue, setMailTransport } from "../src/server/domain/mail-log.ts";
+import { slipHtml } from "../src/lib/slip-html.ts";
 
 process.env.VAULT_KEY = "22".repeat(32);
 const fake = createFakeSheets({});
@@ -306,6 +307,36 @@ ok(payMine && payMine.hidden === true && payMine.net === 0 && payMine.gross === 
 const payDl = await call(ROHAN, "getSlip", { slipId: paySlip.slipId });
 ok(payDl.ok && payDl.data.slip.net === 28200 && payDl.data.slip.att.lop === 0 && payDl.data.slip.att.waived === 3, "…the figures are in the slip he downloads");
 ok(!JSON.stringify(await bundle(ROHAN)).includes("28200") && !JSON.stringify(await call(ROHAN, "listSlipRequests", {})).includes("28200"), "no salary figure anywhere else in his data");
+
+// =============================================================== 30-day month, worked hours, deductions, overtime — a 31-day month (August 2026)
+section("fixed 30-day salary, worked hours and overtime on a 31-day month");
+ok((await call(PAY, "saveStructure", { userId: ASHA, earnings: [{ label: "Basic", amount: 30000 }] })).ok, "Asha's monthly salary is 30,000");
+const aug = [];
+for (let n = 1; n <= 31; n++) {
+  const dd = String(n).padStart(2, "0"), date = `2026-08-${dd}`, dw = new Date(date + "T00:00:00Z").getUTCDay();
+  if (dw === 0) { if (n === 9) aug.push({ userId: ASHA, checkIn: `${date} 09:00`, checkOut: `${date} 13:00` }); continue; } // she worked 4 hours on Sunday 9 August
+  if (n === 10 || n === 11) continue; // absent
+  aug.push({ userId: ASHA, checkIn: `${date} 09:00`, checkOut: `${date} ${n >= 5 && n <= 7 ? "19:30" : "18:00"}` });
+}
+ok((await call(SA, "importAttendance", { rows: aug })).ok, "August attendance is in: two absent days, three 10.5-hour days, four hours on a Sunday");
+const a8 = (await call(PAY, "payrollPreview", { period: "2026-08" })).data.rows.find((r) => r.userId === ASHA);
+const near = (a, b) => Math.abs(a - b) < 0.011;
+ok(a8.calc.daysInMonth === 31 && a8.calc.payDays === 30 && a8.calc.perDay === 1000, "per-day salary is 30,000 ÷ 30 = 1,000 even though August has 31 days");
+ok(a8.calc.lopDays === 2 && a8.calc.lopAmount === 2000 && a8.calc.paidDays === 28, "two absent days cost 2 × 1,000");
+ok(a8.calc.reqHours === 234 && a8.calc.workedHours === 224.5 && a8.calc.overtimeHours === 8.5, `hours: required ${a8.calc.reqHours} (26 working days × 9 h), worked ${a8.calc.workedHours}, overtime ${a8.calc.overtimeHours} (3 × 1.5 h + 4 h on the Sunday)`);
+ok(near(a8.calc.overtimeAmount, 944.44) && near(a8.net, 28944.44), `overtime pay 944.44 (8.5 h × 1,000 ÷ 9); net = 30,000 − 2,000 + 944.44 → ${a8.net}`);
+ok(denied(await call(MEERA, "saveSettings", { settings: { PAY_OT_MULTIPLIER: "2" } })) && !(await call(SA, "saveSettings", { settings: { PAY_OT_MULTIPLIER: "9" } })).ok && !(await call(SA, "saveSettings", { settings: { PAY_PRORATE: "maybe" } })).ok && !(await call(SA, "saveSettings", { settings: { PAY_REQ_HOURS: "30" } })).ok, "only the Super Admin changes the salary rules, and bad values are refused");
+ok((await call(SA, "saveSettings", { settings: { PAY_OT_MULTIPLIER: "1.5" } })).ok && near((await call(PAY, "payrollPreview", { period: "2026-08" })).data.rows.find((r) => r.userId === ASHA).calc.overtimeAmount, 1416.67), "time-and-half: overtime pay becomes 1,416.67");
+ok((await call(SA, "saveSettings", { settings: { PAY_OT_MULTIPLIER: "0" } })).ok && (await call(PAY, "payrollPreview", { period: "2026-08" })).data.rows.find((r) => r.userId === ASHA).calc.overtimeAmount === 0, "multiplier 0: overtime hours are still shown, nothing is paid");
+await call(SA, "saveSettings", { settings: { PAY_OT_MULTIPLIER: "1" } });
+const gen8 = await call(PAY, "generatePaySlips", { period: "2026-08", userIds: [ASHA] });
+const sl8 = (await call(PAY, "listSlips", { everyone: true, period: "2026-08" })).data.slips.find((x) => x.userId === ASHA);
+ok(gen8.ok && sl8 && near(sl8.net, 28944.44) && sl8.earnings.some((e) => /Overtime pay \(8\.5 h\)/.test(e.label) && near(e.amount, 944.44)) && sl8.deductions.some((d) => /Loss of pay \(2 days\)/.test(d.label) && d.amount === 2000), "the slip has an overtime earning, a loss-of-pay deduction and the right net");
+ok(sl8.att.payDays === 30 && sl8.att.monthly === 30000 && sl8.att.perDay === 1000 && sl8.att.reqHours === 234 && sl8.att.workedHours === 224.5 && sl8.att.otHours === 8.5 && near(sl8.att.otAmount, 944.44), "the slip carries every figure of the statement");
+const doc8 = (await call(PAY, "getSlip", { slipId: sl8.slipId })).data;
+const html8 = slipHtml(doc8);
+ok(["fixed 30-day month", "Monthly salary", "Per-day salary", "Total working hours", "Actual worked hours", "Attendance deductions", "Total overtime hours", "Overtime payment", "Net payable salary"].every((t) => html8.includes(t)), "the printed statement shows monthly salary, per-day salary, working hours, worked hours, deductions, overtime hours, overtime payment and net payable");
+ok(!JSON.stringify(await bundle(ASHA)).includes("28944") && !JSON.stringify(await bundle(ASHA)).includes("944.44"), "Asha sees none of it in the app (only her downloaded slip)");
 
 section("an entry can have its own people; each person sees only their steps");
 const two = await call(boss, "createFlow", { name: "Two step", fields: [{ key: "po", label: "PO", type: "text", required: true }, { key: "due", label: "Due", type: "date", required: true }], anchorField: "due", titleFields: ["po"], steps: [{ stepId: "s1", name: "First", assigneeId: ROHAN, rule: { base: "anchor", offsetDays: 0 } }, { stepId: "s2", name: "Second", assigneeId: ROHAN, rule: { base: "anchor", offsetDays: 1 } }] });

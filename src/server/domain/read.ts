@@ -242,6 +242,10 @@ export async function saveSettings(ctx: Ctx, d: Record<string, unknown>) {
     if (["ATT_FULL_HOURS", "ATT_HALF_HOURS", "ATT_STD_HOURS"].includes(k)) require_(v !== "" && !isNaN(Number(v)) && Number(v) > 0 && Number(v) <= 24, `${k} must be a number of hours (1-24)`);
     if (k === "ATT_GATE") require_(["required", "prompt", "off"].includes(v), "ATT_GATE must be required, prompt or off");
     if (["ATT_GATE_FROM", "ATT_REMIND_CHECKIN", "ATT_REMIND_CHECKOUT"].includes(k)) require_(/^([01]\d|2[0-3]):[0-5]\d$/.test(v), `${k} must be a time like 09:45`);
+    if (k === "PAY_REQ_HOURS") require_(v !== "" && !isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 24, "PAY_REQ_HOURS must be hours between 0 and 24 (0 = use the normal hours)");
+    if (k === "PAY_OT_MULTIPLIER") require_(v !== "" && !isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 5, "PAY_OT_MULTIPLIER must be a number from 0 to 5");
+    if (k === "PAY_OT_MIN_MINUTES") require_(/^\d{1,3}$/.test(v) && Number(v) <= 240, "PAY_OT_MIN_MINUTES must be a whole number of minutes (0 to 240)");
+    if (k === "PAY_PRORATE") require_(["Y", "N"].includes(v), "PAY_PRORATE must be Y or N");
     if (k === "PAY_LATE_MARKS") require_(/^\d{1,2}$/.test(v), "PAY_LATE_MARKS must be a whole number (0 = off)");
     if (k === "DIGEST_ENABLED" || k === "ATT_SELF_PUNCH" || k === "LEAVE_BLOCK_OVERDRAW" || k === "PAY_EMAIL_SLIPS" || k === "PAY_EMAIL_ATTACH") require_(["Y", "N"].includes(v), `${k} must be Y or N`);
     if (k === "ATT_DEVICE_CHECK") require_(["Y", "N"].includes(v), "ATT_DEVICE_CHECK must be Y or N");

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 interface Line { label: string; amount: number }
 interface Waiver { waiverId: string; date: string; kind: "absent" | "late"; reason: string }
-interface Calc { daysInMonth: number; present: number; half: number; leave: number; offDays: number; absentDates: string[]; halfDates: string[]; lateDates: string[]; lopDays: number; lateDeductDays: number; paidDays: number; perDay: number; lopAmount: number; lateAmount: number }
+interface Calc { daysInMonth: number; present: number; half: number; leave: number; offDays: number; absentDates: string[]; halfDates: string[]; lateDates: string[]; lopDays: number; lateDeductDays: number; paidDays: number; perDay: number; lopAmount: number; lateAmount: number; payDays: number; reqHours: number; workedHours: number; overtimeHours: number; overtimeAmount: number; hourlyRate: number; reqHoursPerDay: number }
 interface Row { userId: string; name: string; empCode: string; department: string; hasStructure: boolean; gross: number; fixedDeductions: number; calc: Calc | null; net: number | null; slip: { slipId: string; status: string } | null; waivers: Waiver[] }
 interface Preview { period: string; provisional: boolean; lateMarks: number; rows: Row[] }
 interface Structure { userId: string; earnings: Line[]; deductions: Line[]; gross: number; note: string; updatedAt: string }
@@ -59,7 +59,7 @@ export function PayFromAttendance() {
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Input type="month" value={period} max={today.slice(0, 7)} onChange={(e) => e.target.value && setPeriod(e.target.value)} className="h-9 w-44" aria-label="Month" />
-        <span className="text-xs text-muted-foreground">{fmtMonth(period)} · pay per day = monthly pay ÷ days in the month · {pv?.lateMarks ? `every ${pv.lateMarks} late arrivals cost half a day` : "late arrivals do not cost pay (Settings → PAY_LATE_MARKS)"}</span>
+        <span className="text-xs text-muted-foreground">{fmtMonth(period)} · fixed 30-day month: pay per day = monthly pay ÷ 30 · {pv?.lateMarks ? `every ${pv.lateMarks} late arrivals cost half a day` : "late arrivals do not cost pay (Settings → PAY_LATE_MARKS)"}</span>
         {canMake && ready.length > 0 && <Button className="ml-auto" disabled={busy} onClick={() => make([])}>{busy ? <Spinner /> : <WandSparklesIcon />} Prepare draft slips for all ({ready.length})</Button>}
       </div>
       {pv?.provisional && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">This month is not over. Days still to come are counted as paid; run it again at the end of the month for the final figures.</p>}
@@ -80,7 +80,7 @@ export function PayFromAttendance() {
               {!r.hasStructure || !r.calc ? (
                 <td colSpan={3} className="text-xs text-muted-foreground">No monthly salary set yet.</td>
               ) : (<>
-                <td className="text-xs tabular-nums"><div>{r.calc.present}{r.calc.half ? ` + ${r.calc.half}½` : ""} present · {r.calc.leave} leave · {r.calc.offDays} off</div><div className="text-muted-foreground">{r.calc.lateDates.length} late</div></td>
+                <td className="text-xs tabular-nums"><div>{r.calc.present}{r.calc.half ? ` + ${r.calc.half}½` : ""} present · {r.calc.leave} leave · {r.calc.offDays} off</div><div className="text-muted-foreground">{r.calc.lateDates.length} late</div><div className="text-muted-foreground">{r.calc.workedHours} h worked of {r.calc.reqHours} h</div>{r.calc.overtimeHours > 0 && <div className="font-medium text-emerald-700">+{r.calc.overtimeHours} h overtime · {rupees(r.calc.overtimeAmount)}</div>}</td>
                 <td className="min-w-52 text-xs">
                   {r.calc.absentDates.length + r.calc.halfDates.length + r.calc.lateDates.length === 0 && <span className="text-muted-foreground">Full pay</span>}
                   <div className="flex flex-wrap gap-1">
@@ -97,7 +97,7 @@ export function PayFromAttendance() {
                   </div>
                   {r.calc.lopDays > 0 && <div className="mt-1 text-muted-foreground">{r.calc.lopDays} day{r.calc.lopDays === 1 ? "" : "s"} · −{rupees(r.calc.lopAmount)}{r.calc.lateAmount ? ` · late −${rupees(r.calc.lateAmount)}` : ""}</div>}
                 </td>
-                <td className="text-xs tabular-nums"><div>{rupees(r.gross)} gross</div><div className="font-semibold">{rupees(r.net ?? 0)} net</div><div className="text-muted-foreground">{r.calc.paidDays}/{r.calc.daysInMonth} days</div></td>
+                <td className="text-xs tabular-nums"><div>{rupees(r.gross)} gross</div><div className="font-semibold">{rupees(r.net ?? 0)} net</div><div className="text-muted-foreground">{r.calc.paidDays}/{r.calc.payDays} days · {rupees(r.calc.perDay)}/day</div></td>
               </>)}
               <td>{r.slip ? <Pill tone={r.slip.status === "Published" ? "green" : "amber"}>{r.slip.status}</Pill> : <Pill>None</Pill>}</td>
               <td className="whitespace-nowrap text-right">

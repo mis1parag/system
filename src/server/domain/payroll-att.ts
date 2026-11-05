@@ -5,7 +5,7 @@
  */
 import { attSettings, calFrom, personDays } from "../../lib/attendance.ts";
 import type { AttendanceRow, LeaveRow } from "../../lib/flow-types.ts";
-import { calcPay, daysInMonthOf, type PayCalc, type PayWaiver } from "../../lib/payroll-calc.ts";
+import { calcPay, daysInMonthOf, type PayCalc, type PayRules, type PayWaiver } from "../../lib/payroll-calc.ts";
 import { fail, forbid, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
 import { isPeriod, lines, preparesFor } from "./payroll.ts";
@@ -50,6 +50,17 @@ interface Row {
   calc: PayCalc | null; net: number | null; slip: { slipId: string; status: string } | null; waivers: (PayWaiver & { waiverId: string })[];
 }
 
+/** The company's pay rules, from Settings (all in one place so the preview and the slips can never disagree). */
+export function payRules(ctx: Ctx): PayRules {
+  const set = attSettings(ctx.settings);
+  const num = (key: string, def: number) => { const v = ctx.setting(key, ""); const n = Number(v); return v !== "" && !isNaN(n) && n >= 0 ? n : def; };
+  return {
+    lateMarksPerHalf: Number(ctx.setting("PAY_LATE_MARKS", "0")) || 0,
+    reqHours: num("PAY_REQ_HOURS", 0) || set.stdHours || 9, fullHours: set.fullHours,
+    prorate: ctx.setting("PAY_PRORATE", "N") === "Y", otMultiplier: num("PAY_OT_MULTIPLIER", 1), otMinMinutes: num("PAY_OT_MIN_MINUTES", 30),
+  };
+}
+
 async function compute(ctx: Ctx, period: string): Promise<{ rows: Row[]; provisional: boolean }> {
   require_(isPeriod(period), "Choose the month");
   require_(period <= ctx.clock.date.slice(0, 7), "That month has not come yet");
@@ -64,7 +75,7 @@ async function compute(ctx: Ctx, period: string): Promise<{ rows: Row[]; provisi
   const structs = new Map((await ctx.tx.rows("Salary_Structure")).map((r) => [String(r.userId), r]));
   const waivers = alive(await ctx.tx.rows("Pay_Waivers")).filter((w) => w.period === period);
   const slips = alive(await ctx.tx.rows("Salary_Slips")).filter((s) => s.period === period);
-  const marks = Number(ctx.setting("PAY_LATE_MARKS", "0")) || 0;
+  const rules = payRules(ctx);
   const rows: Row[] = [];
   for (const u of users) {
     const id = String(u.userId);
@@ -76,11 +87,11 @@ async function compute(ctx: Ctx, period: string): Promise<{ rows: Row[]; provisi
     const tracked = att.some((a) => a.userId === id) || leaves.some((l) => l.userId === id && l.startDate <= to && l.endDate >= from);
     // someone with no attendance at all in the month (not on the system yet) is paid in full: nothing to measure
     const days = tracked ? personDays(att, leaves, id, from, to, ctx.clock.dt, cal, set) : [];
-    const calc = st ? calcPay({ period, days, gross, waivers: mine, lateMarksPerHalf: marks }) : null;
+    const calc = st ? calcPay({ period, days, gross, waivers: mine, rules }) : null;
     const slip = slips.find((s) => s.userId === id);
     rows.push({
       userId: id, name: String(u.name), empCode: String(u.empCode ?? ""), department: String(u.department ?? ""), hasStructure: !!st, gross, fixedDeductions: fixedSum, calc,
-      net: calc ? money(gross - fixedSum - calc.lopAmount - calc.lateAmount) : null, slip: slip ? { slipId: String(slip.slipId), status: String(slip.status) } : null, waivers: mine,
+      net: calc ? money(gross - fixedSum - calc.lopAmount - calc.lateAmount + calc.overtimeAmount) : null, slip: slip ? { slipId: String(slip.slipId), status: String(slip.status) } : null, waivers: mine,
     });
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
@@ -92,7 +103,7 @@ export async function payrollPreview(ctx: Ctx, d: Record<string, unknown>) {
   const prepares = ctx.isSuper || ["create", "edit", "approve", "manage", "import"].some((a) => ctx.allow("payroll", a as never));
   forbid(prepares, "You cannot see payroll");
   const { rows, provisional } = await compute(ctx, str(d.period));
-  return { period: str(d.period), provisional, lateMarks: Number(ctx.setting("PAY_LATE_MARKS", "0")) || 0, rows };
+  return { period: str(d.period), provisional, lateMarks: Number(ctx.setting("PAY_LATE_MARKS", "0")) || 0, rules: payRules(ctx), rows };
 }
 
 /** Pay (or do not deduct for) one day. `waive: false` takes the waiver back. */
@@ -139,12 +150,15 @@ export async function generatePaySlips(ctx: Ctx, d: Record<string, unknown>) {
     if (old && old.status === "Published") { skipped.push(`${r.name}: slip already published`); continue; }
     const st = structs.get(r.userId)!;
     const earnings = parse(st.earningsJson), deductions = parse(st.deductionsJson);
+    if (r.calc.overtimeAmount > 0) earnings.push({ label: `Overtime pay (${r.calc.overtimeHours} h)`, amount: r.calc.overtimeAmount });
     if (r.calc.lopAmount > 0) deductions.push({ label: `Loss of pay (${r.calc.lopDays} day${r.calc.lopDays === 1 ? "" : "s"})`, amount: r.calc.lopAmount });
     if (r.calc.lateAmount > 0) deductions.push({ label: `Late arrivals (${r.calc.lateDeductDays} day)`, amount: r.calc.lateAmount });
     const gross = sum(earnings), ded = sum(deductions);
     require_(ded <= gross, `${r.name}: the deductions are more than the earnings`);
     const waived = r.waivers.length ? ` Waived off: ${r.waivers.map((w) => `${w.date.slice(8)}/${w.date.slice(5, 7)} (${w.reason})`).join("; ").slice(0, 200)}.` : "";
-    const att = { daysInMonth: r.calc.daysInMonth, present: r.calc.present, half: r.calc.half, leave: r.calc.leave, off: r.calc.offDays, lop: r.calc.lopDays, late: r.calc.lateDates.length, lateDeducted: r.calc.lateDeductDays, waived: r.waivers.length, provisional };
+    const att = { daysInMonth: r.calc.daysInMonth, present: r.calc.present, half: r.calc.half, leave: r.calc.leave, off: r.calc.offDays, lop: r.calc.lopDays, late: r.calc.lateDates.length, lateDeducted: r.calc.lateDeductDays, waived: r.waivers.length, provisional,
+      payDays: r.calc.payDays, monthly: sum(parse(st.earningsJson)), perDay: r.calc.perDay, reqHoursPerDay: r.calc.reqHoursPerDay, reqHours: r.calc.reqHours, workedHours: r.calc.workedHours,
+      lopAmount: r.calc.lopAmount, lateAmount: r.calc.lateAmount, otHours: r.calc.overtimeHours, otAmount: r.calc.overtimeAmount, otRate: r.calc.hourlyRate, otMultiplier: r.calc.otMultiplier, prorate: r.calc.prorate };
     const fields = { daysPaid: r.calc.paidDays, earningsJson: JSON.stringify(earnings), deductionsJson: JSON.stringify(deductions), gross, totalDeductions: ded, net: money(gross - ded), note: `Worked out from attendance.${waived}`.slice(0, 300), attJson: JSON.stringify(att) };
     if (old) { Object.assign(old, fields); replaced++; ctx.tx.audit("Salary slip regenerated", "Salary_Slips", String(old.slipId), null, { employee: r.userId, period, net: fields.net }); }
     else { const s = ctx.tx.insert("Salary_Slips", { slipId: newId("SLP"), userId: r.userId, period, ...fields, status: "Draft", createdBy: ctx.actorId, createdAt: ctx.clock.stamp, publishedBy: "", publishedAt: "", viewedAt: "", deleted: "", emailedAt: "" }); made++; ctx.tx.audit("Salary slip prepared", "Salary_Slips", String(s.slipId), null, { employee: r.userId, period, from: "attendance" }); }

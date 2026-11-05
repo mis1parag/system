@@ -1,6 +1,7 @@
 // The fixed 30-day salary rule, worked hours, deductions and overtime — the pure calculation (no server).
 //   node --no-warnings tools/test-pay30.mjs
 import { calcPay, PAY_MONTH_DAYS } from "../src/lib/payroll-calc.ts";
+import { attSettings, personReport } from "../src/lib/attendance.ts";
 
 let pass = 0, failed = 0;
 const ok = (c, m) => { if (c) pass++; else { failed++; console.log("  ✗ FAIL:", m); } };
@@ -91,6 +92,16 @@ ok(c.reqHours === 27 * 8 && c.overtimeHours === 27 && near(c.hourlyRate, 125), "
 section("late marks keep working");
 c = pay("2026-10", {}, { lateMarksPerHalf: 3 }, 30000, [], { late: ["2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"] });
 ok(c.lateDeductDays === 1 && c.lateAmount === 1000, "7 late marks at 3 per half day = 2 × 0.5 days");
+
+section("the monthly report shows the same hours as the salary slip");
+const sp = { "2026-10-05": 10.5, "2026-10-06": 11, "2026-10-13": 0, "2026-10-04": 5, "2026-10-14": "leave" };
+const set = attSettings({});
+const rep = personReport("u", month("2026-10", sp), set);
+const cc = calcPay({ period: "2026-10", days: month("2026-10", sp), gross: 30000, waivers: [], rules: { reqHours: set.reqHours, otMinMinutes: set.otMinMinutes } });
+ok(rep.reqHours === cc.reqHours && rep.workedHours === cc.workedHours && rep.overtimeHours === cc.overtimeHours, `report: required ${rep.reqHours} h, worked ${rep.workedHours} h, overtime ${rep.overtimeHours} h — the same as the slip`);
+ok(rep.overtimeHours === 1.5 + 2 + 5 && rep.reqHours === 26 * 9, "overtime = 1.5 + 2 on working days + 5 on the Sunday; required = 26 working days (27 minus the leave day) × 9 h");
+ok(attSettings({}).reqHours === 9 && attSettings({ ATT_STD_HOURS: "10" }).reqHours === 10 && attSettings({ ATT_STD_HOURS: "10", PAY_REQ_HOURS: "8" }).reqHours === 8, "required hours: normal hours unless the salary rule says otherwise");
+ok(attSettings({}).otMinMinutes === 30 && attSettings({ PAY_OT_MIN_MINUTES: "0" }).otMinMinutes === 0 && attSettings({ PAY_OT_MIN_MINUTES: "15" }).otMinMinutes === 15, "the overtime minimum follows the setting (0 is allowed)");
 
 console.log(`\n${pass} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

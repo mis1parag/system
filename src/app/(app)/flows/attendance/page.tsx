@@ -104,7 +104,7 @@ function MyMonth({ person, onPerson }: { person: string; onPerson: (id: string) 
         <StatCard dense label={<>Late <Hint>First check-in after {att.set.lateAfter}.</Hint></>} value={rep.late} tone={rep.late > 2 ? "warn" : undefined} />
         <StatCard dense label={<>Early out <Hint>Last check-out before {att.set.earlyBefore}.</Hint></>} value={rep.early} />
         <StatCard dense label={<>On-time arrival <Hint>Days present without being late.</Hint></>} value={rep.present + rep.half ? pct1(rep.onTimePct) : "—"} />
-        <StatCard dense label="Hours worked" value={fmtHours(rep.totalHours)} sub={rep.overtime ? `${rep.overtime} overtime day${rep.overtime > 1 ? "s" : ""}` : `${pct1(rep.hoursPct)} of normal`} />
+        <StatCard dense label="Hours worked" value={fmtHours(rep.workedHours)} sub={`of ${fmtHours(rep.reqHours)} working hours${rep.overtimeHours ? ` · ${fmtHours(rep.overtimeHours)} overtime` : ""}`} />
       </div>
       <Section title={`${userName(person)} · ${fmtMonth(month)}`} hint="Tap a day to see the punches. Admins can correct them there.">
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted-foreground">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d}>{d}</div>)}</div>
@@ -207,7 +207,9 @@ function Report({ onOpen }: { onOpen: (id: string) => void }) {
     { id: "late", label: "Late", sort: (x) => x.r.late, render: (x) => <span className="tabular-nums">{x.r.late}</span>, csv: (x) => x.r.late, align: "right" },
     { id: "early", label: "Early", hidden: true, sort: (x) => x.r.early, render: (x) => <span className="tabular-nums">{x.r.early}</span>, csv: (x) => x.r.early, align: "right" },
     { id: "ot", label: "OT", hidden: true, sort: (x) => x.r.overtime, render: (x) => <span className="tabular-nums">{x.r.overtime}</span>, csv: (x) => x.r.overtime, align: "right" },
-    { id: "hours", label: "Hours", sort: (x) => x.r.totalHours, render: (x) => <span className="tabular-nums">{x.r.totalHours.toFixed(1)}</span>, csv: (x) => x.r.totalHours, align: "right" },
+    { id: "reqh", label: "Working hours", sort: (x) => x.r.reqHours, render: (x) => <span className="tabular-nums">{x.r.reqHours.toFixed(1)}</span>, csv: (x) => x.r.reqHours, align: "right" },
+    { id: "hours", label: "Worked hours", sort: (x) => x.r.workedHours, render: (x) => <span className={cn("tabular-nums", x.r.reqHours > 0 && x.r.workedHours < x.r.reqHours && "text-amber-700")}>{x.r.workedHours.toFixed(1)}</span>, csv: (x) => x.r.workedHours, align: "right" },
+    { id: "oth", label: "Overtime hours", sort: (x) => x.r.overtimeHours, render: (x) => <span className={cn("tabular-nums", x.r.overtimeHours > 0 && "font-medium text-emerald-700")}>{x.r.overtimeHours ? x.r.overtimeHours.toFixed(1) : "—"}</span>, csv: (x) => x.r.overtimeHours, align: "right" },
     { id: "ontime", label: "On-time arrival", sort: (x) => x.r.onTimePct, render: (x) => <span className="tabular-nums">{x.r.present + x.r.half ? pct1(x.r.onTimePct) : "—"}</span>, csv: (x) => x.r.onTimePct },
   ];
   return (

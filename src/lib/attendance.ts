@@ -7,9 +7,10 @@
 import { addDays, minutesBetween, weekday } from "../server/domain/time.ts";
 import type { AttendanceRow, LeaveRow, LeaveType } from "./flow-types.ts";
 
-export interface AttSettings { lateAfter: string; earlyBefore: string; fullHours: number; halfHours: number; stdHours: number }
+export interface AttSettings { lateAfter: string; earlyBefore: string; fullHours: number; halfHours: number; stdHours: number; /** required working hours of a working day (PAY_REQ_HOURS, default = stdHours) */ reqHours: number; /** extra time shorter than this is not overtime */ otMinMinutes: number }
 export const attSettings = (s: Record<string, string> = {}): AttSettings => ({
   lateAfter: s.ATT_LATE_AFTER || "09:30", earlyBefore: s.ATT_EARLY_BEFORE || "17:00", fullHours: Number(s.ATT_FULL_HOURS) || 6, halfHours: Number(s.ATT_HALF_HOURS) || 4, stdHours: Number(s.ATT_STD_HOURS) || 9,
+  reqHours: Number(s.PAY_REQ_HOURS) || Number(s.ATT_STD_HOURS) || 9, otMinMinutes: s.PAY_OT_MIN_MINUTES !== undefined && s.PAY_OT_MIN_MINUTES !== "" && !isNaN(Number(s.PAY_OT_MIN_MINUTES)) ? Number(s.PAY_OT_MIN_MINUTES) : 30,
 });
 
 export interface Cal { off: Set<number>; holidays: Set<string> }
@@ -69,12 +70,33 @@ export function personDays(rows: AttendanceRow[], leaves: LeaveRow[], userId: st
   return out;
 }
 
+/**
+ * The hours of a set of days: required (working days × the required hours of a day), worked (everything punched), overtime (the extra beyond the required hours of a working day,
+ * and all of the hours on a weekly off / holiday — when the extra is at least otMinMinutes). Days still to come and a day still running are not counted yet; leave days need no hours.
+ * The monthly report and the salary slip both use this, so they can never disagree.
+ */
+export function hoursSummary(days: DayInfo[], reqHoursPerDay: number, otMinMinutes: number): { reqHours: number; workedHours: number; overtimeHours: number } {
+  let req = 0, worked = 0, overtime = 0;
+  for (const d of days) {
+    if (d.status === "future" || d.status === "pending") continue;
+    worked += d.hours;
+    const offDay = d.status === "off" || d.status === "holiday";
+    if (!offDay && d.status !== "leave") req += reqHoursPerDay;
+    const extra = offDay ? d.hours : d.status === "leave" ? 0 : Math.max(0, d.hours - reqHoursPerDay);
+    if (extra > 0 && extra * 60 >= otMinMinutes) overtime += extra;
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return { reqHours: r2(req), workedHours: r2(worked), overtimeHours: r2(overtime) };
+}
+
 export interface PersonReport {
   userId: string; workingDays: number; present: number; half: number; absent: number; leave: number; late: number; early: number; overtime: number; totalHours: number;
   /** (full + ½ half) ÷ working days, % */ attendancePct: number;
   /** (days present − late days) ÷ days present, % */ onTimePct: number;
   /** hours worked ÷ (working days × normal hours), % */ hoursPct: number;
   missingOut: number; days: DayInfo[];
+  /** the month's hours: required (working hours), worked, and overtime hours */
+  reqHours: number; workedHours: number; overtimeHours: number;
 }
 
 export function personReport(userId: string, days: DayInfo[], set: AttSettings): PersonReport {
@@ -95,7 +117,7 @@ export function personReport(userId: string, days: DayInfo[], set: AttSettings):
   return {
     userId, workingDays: working, present, half, absent, leave, late, early, overtime, totalHours: Math.round(hours * 100) / 100,
     attendancePct: working ? r1(((present + 0.5 * half) / working) * 100) : 0, onTimePct: attended ? r1(((attended - late) / attended) * 100) : 0,
-    hoursPct: working ? r1((hours / (working * set.stdHours)) * 100) : 0, missingOut: missing, days,
+    hoursPct: working ? r1((hours / (working * set.stdHours)) * 100) : 0, missingOut: missing, days, ...hoursSummary(days, set.reqHours, set.otMinMinutes),
   };
 }
 

@@ -97,7 +97,7 @@ export function MarkTab() {
             <StatCard dense label="Absent" value={rep.absent} tone={rep.absent ? "bad" : "good"} sub={`${rep.leave} on leave`} />
             <StatCard dense label="Late arrivals" value={rep.late} tone={rep.late > 2 ? "warn" : undefined} sub={rep.present + rep.half ? `${pct1(rep.onTimePct)} on time` : undefined} />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">{fmtHours(rep.totalHours)} worked between {fmtDate(monthStart(today.slice(0, 7)))} and {fmtDate(monthEnd(today.slice(0, 7)) < today ? monthEnd(today.slice(0, 7)) : today)}.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{fmtHours(rep.workedHours)} worked of {fmtHours(rep.reqHours)} working hours{rep.overtimeHours ? ` (${fmtHours(rep.overtimeHours)} overtime)` : ""}, between {fmtDate(monthStart(today.slice(0, 7)))} and {fmtDate(monthEnd(today.slice(0, 7)) < today ? monthEnd(today.slice(0, 7)) : today)}.</p>
         </Section>
       </div>
 

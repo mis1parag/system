@@ -15,7 +15,7 @@
 //   Hours: required hours = working days × PAY_REQ_HOURS (default ATT_STD_HOURS); worked hours = everything punched.
 //   Overtime: the hours beyond the required hours of a working day, and all hours worked on a weekly off / holiday — only when the extra is at least
 //   PAY_OT_MIN_MINUTES. Overtime pay = overtime hours × hourly rate (per-day salary ÷ required hours per day) × PAY_OT_MULTIPLIER (0 = tracked, not paid).
-import type { DayInfo } from "./attendance.ts";
+import { hoursSummary, type DayInfo } from "./attendance.ts";
 
 /** The salary month of this company is always 30 days. */
 export const PAY_MONTH_DAYS = 30;
@@ -70,17 +70,9 @@ export function calcPay(args: { period: string; days: DayInfo[]; gross: number; 
   const perDay = gross / PAY_MONTH_DAYS;
   const hourly = rules.reqHours > 0 ? perDay / rules.reqHours : 0;
 
-  // hours: what was required, what was worked, what was beyond it
-  let reqHours = 0, worked = 0, overtime = 0;
-  for (const d of days) {
-    if (d.status === "future" || d.status === "pending") continue; // not over yet
-    worked += d.hours;
-    const offDay = d.status === "off" || d.status === "holiday";
-    if (!offDay && d.status !== "leave") reqHours += rules.reqHours;
-    const extra = offDay ? d.hours : d.status === "leave" ? 0 : Math.max(0, d.hours - rules.reqHours);
-    if (extra * 60 >= rules.otMinMinutes && extra > 0) overtime += extra;
-  }
-  overtime = round2(overtime);
+  // hours: what was required, what was worked, what was beyond it (the same rule as the monthly report)
+  const hrs = hoursSummary(days, rules.reqHours, rules.otMinMinutes);
+  const reqHours = hrs.reqHours, worked = hrs.workedHours, overtime = hrs.overtimeHours;
 
   const used = [...absentDates, ...halfDates].filter((d) => wAbsent.has(d)).map((d) => wAbsent.get(d)!).concat(lateDates.filter((d) => wLate.has(d)).map((d) => wLate.get(d)!));
   return {

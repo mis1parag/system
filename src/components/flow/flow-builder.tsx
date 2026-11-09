@@ -135,7 +135,7 @@ function MiniFields({ rows, onChange }: { rows: FRow[]; onChange: (r: FRow[]) =>
 export function FlowBuilder({ flow }: { flow?: Flow }) {
   const router = useRouter();
   const { data, call, itemsOf } = useFlows();
-  const people = (data?.users ?? []).filter((u) => u.status === "Active");
+  const people = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y");
   const [d, setD] = useState<Def>(() => (flow ? fromFlow(flow) : blank()));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

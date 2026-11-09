@@ -9,7 +9,7 @@ import { makeCtx, type Ctx } from "./domain/ctx.ts";
 import { bulkSaveUsers, saveUser, updateProfile } from "./domain/auth.ts";
 import { createFlow, replanFlow, rotateIntakeToken, setFlowAccess, updateFlow } from "./domain/flows.ts";
 import { getAvatar, getEmployee, saveEmployee, saveProfilePhoto } from "./domain/employee.ts";
-import { deleteRole, renameDepartment, resetRole, saveRole, saveUserAccess } from "./domain/access.ts";
+import { deleteRole, renameDepartment, resetRole, saveRole, saveUserAccess, setSuperAdminOnly } from "./domain/access.ts";
 import { deleteLink, reorderLinks, saveLink, adoptLink } from "./domain/quick.ts";
 import { assignVault, deleteVault, listVault, revealVault, saveVault } from "./domain/vault.ts";
 import { deleteFilter, saveFilter } from "./domain/filters.ts";
@@ -132,6 +132,7 @@ export function buildActions(live: boolean): Record<string, ActionDef> {
     saveRole: { roles: SUPER, fn: saveRole },
     resetRole: { roles: SUPER, fn: resetRole },
     deleteRole: { roles: SUPER, fn: deleteRole },
+    setSuperAdminOnly: { roles: SUPER, fn: setSuperAdminOnly },
     saveUserAccess: { roles: SUPER, fn: saveUserAccess },
     renameDepartment: { roles: SUPER, fn: renameDepartment },
     saveSettings: { roles: ALL, perm: ["settings", "configure"], fn: saveSettings },

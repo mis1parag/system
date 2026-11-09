@@ -14,7 +14,7 @@ type Tpl = (typeof TEMPLATES)[number]["data"] & { steps: { assigneeName?: string
 /** Create many ready-made FMS in one go. People are matched by the name used in the template (or the usual stand-in for a role). */
 export function AddTemplatesDialog({ onClose }: { onClose: () => void }) {
   const { data, flows, call, meId } = useFlows();
-  const people = useMemo(() => (data?.users ?? []).filter((u) => u.status === "Active"), [data]);
+  const people = useMemo(() => (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y"), [data]);
   const have = useMemo(() => new Set(flows.map((f) => f.name.toLowerCase())), [flows]);
   const idOf = (name: string | undefined) => {
     const n = String(name ?? "").toLowerCase();

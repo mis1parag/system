@@ -31,7 +31,7 @@ export default function UsersPage() {
   const [access, setAccess] = useState("");
   const [many, setMany] = useState(false);
   const [fstate, setFstate] = useFilters("employees:list", "active");
-  const mine = useMemo(() => (data?.users ?? []).filter((u) => u.deleted !== "Y" && inReach(u.userId, "employees")), [data?.users, inReach]);
+  const mine = useMemo(() => (data?.users ?? []).filter((u) => u.deleted !== "Y" && u.notEmployee !== "Y" && inReach(u.userId, "employees")), [data?.users, inReach]);
   if (!data) return null;
   const manage = allow("employees", "create");
   // only the Super Admin changes Admins and the Super Admin; everyone else with Employees · edit changes Managers and Team Members

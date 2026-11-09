@@ -94,7 +94,7 @@ export function EntryForm({ flow, item, onClose, onSaved }: { flow: Flow; item?:
               </Field>
               {visibility === "users" && (
                 <div className="grid max-h-40 gap-1 overflow-y-auto rounded-lg border bg-card p-2">
-                  {(data?.users ?? []).filter((u) => u.status === "Active" && u.userId !== meId).map((u) => <label key={u.userId} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={visibleTo.includes(u.userId)} onChange={(e) => setVisibleTo(e.target.checked ? [...visibleTo, u.userId] : visibleTo.filter((x) => x !== u.userId))} />{u.name}<span className="text-xs text-muted-foreground">{u.department}</span></label>)}
+                  {(data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y" && u.userId !== meId).map((u) => <label key={u.userId} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={visibleTo.includes(u.userId)} onChange={(e) => setVisibleTo(e.target.checked ? [...visibleTo, u.userId] : visibleTo.filter((x) => x !== u.userId))} />{u.name}<span className="text-xs text-muted-foreground">{u.department}</span></label>)}
                 </div>
               )}
             </div>

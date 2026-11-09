@@ -164,7 +164,7 @@ function PeopleTab({ roles }: { roles: RoleInfo[] }) {
           const n = Object.keys(a?.overrides ?? {}).length;
           return (
             <tr key={u.userId}>
-              <td><span className="flex items-center gap-2 font-medium"><Avatar userId={u.userId} size={26} />{u.name}</span></td>
+              <td><span className="flex items-center gap-2 font-medium"><Avatar userId={u.userId} size={26} />{u.name}{u.notEmployee === "Y" && <Pill tone="violet">Super Admin only</Pill>}</span></td>
               <td className="text-muted-foreground">{u.department || "—"}</td>
               <td>{a?.roleId ? <span>{roleName(a.roleId)} <span className="text-xs text-muted-foreground">(custom)</span></span> : roleName(u.role)}</td>
               <td>{n ? <Pill tone="amber">{n} module{n === 1 ? "" : "s"} changed</Pill> : <span className="text-xs text-muted-foreground">as the role</span>}</td>

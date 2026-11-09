@@ -1,5 +1,6 @@
 /** Check-in / check-out reminders, sent by the scheduler. A person who forgets is told — once a day, in the app (and by email / WhatsApp if connected). */
 import { Ctx } from "./ctx.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { checklistCalendar } from "./checklist.ts";
 import { addDays, isOffDay } from "./time.ts";
 
@@ -18,7 +19,7 @@ export async function attendanceTick(ctx: Ctx): Promise<{ checkIn: number; check
   const sent = new Set((await ctx.tx.rows("Notifications")).filter((n) => (n.type === "checkin-reminder" || n.type === "checkout-reminder") && String(n.createdAt).slice(0, 10) === now.date).map((n) => `${n.type}|${n.userId}`));
   const since = addDays(now.date, -45);
   for (const u of await ctx.tx.rows("Users")) {
-    if (u.status !== "Active") continue;
+    if (u.status !== "Active" || !isEmployee(u)) continue;
     const uid = String(u.userId);
     const mine = rows.filter((r) => r.userId === uid);
     if (!u.empCode && !mine.some((r) => String(r.date) >= since)) continue; // not part of the attendance system

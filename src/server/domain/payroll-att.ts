@@ -7,6 +7,7 @@ import { attSettings, calFrom, personDays } from "../../lib/attendance.ts";
 import type { AttendanceRow, LeaveRow } from "../../lib/flow-types.ts";
 import { calcPay, daysInMonthOf, type PayCalc, type PayRules, type PayWaiver } from "../../lib/payroll-calc.ts";
 import { fail, forbid, newId, pub, require_, type Rec } from "../sheets/db.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { Ctx } from "./ctx.ts";
 import { isPeriod, lines, preparesFor } from "./payroll.ts";
 import { isDate } from "./time.ts";
@@ -22,7 +23,7 @@ export async function saveStructure(ctx: Ctx, d: Record<string, unknown>) {
   ctx.require("payroll", "edit", "Only people who run payroll can set a salary");
   const userId = str(d.userId);
   const user = await ctx.user(userId);
-  require_(user && user.status === "Active" && user.deleted !== "Y", "Choose the employee");
+  require_(user && user.status === "Active" && user.deleted !== "Y" && isEmployee(user), "Choose the employee (a Super-Admin-only account has no salary here)");
   forbid(userId !== ctx.actorId || ctx.isSuper, "You cannot set your own salary");
   forbid(await preparesFor(ctx, userId), "That person is outside your payroll access");
   const earnings = lines(d.earnings, "earnings"), deductions = lines(d.deductions, "deductions");
@@ -66,7 +67,7 @@ async function compute(ctx: Ctx, period: string): Promise<{ rows: Row[]; provisi
   require_(period <= ctx.clock.date.slice(0, 7), "That month has not come yet");
   const from = `${period}-01`, to = `${period}-${String(daysInMonthOf(period)).padStart(2, "0")}`;
   const reach = await ctx.reach("payroll");
-  const users = (await ctx.tx.rows("Users")).filter((u) => u.deleted !== "Y" && u.status === "Active" && (u.userId !== ctx.actorId || ctx.isSuper) && (reach.all || reach.ids.has(String(u.userId))));
+  const users = (await ctx.tx.rows("Users")).filter((u) => u.deleted !== "Y" && u.status === "Active" && isEmployee(u) && (u.userId !== ctx.actorId || ctx.isSuper) && (reach.all || reach.ids.has(String(u.userId))));
   const holidays = alive(await ctx.tx.rows("Holidays")).filter((h) => h.published !== "N");
   const cal = calFrom(ctx.settings, holidays as unknown as { date: string; flowId?: string }[]);
   const set = attSettings(ctx.settings);

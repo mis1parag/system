@@ -1,6 +1,7 @@
 /** Reads for the browser, plus small account / settings writes. */
 import { addDays } from "./time.ts";
 import { rulesOf } from "./devices.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { Ctx } from "./ctx.ts";
 import { fail, forbid, pub, require_, type Rec } from "../sheets/db.ts";
 import { DEFAULT_SETTINGS } from "../sheets/schema.ts";
@@ -107,7 +108,7 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
 
   return {
     live, counts, serverDate: ctx.clock.date, serverTime: ctx.clock.time,
-    me: { ...pub("Users", ctx.actor), roleId: ctx.actor.roleId },
+    me: { ...pub("Users", ctx.actor), roleId: ctx.actor.roleId, notEmployee: isEmployee(ctx.actor) ? "" : "Y" },
     flows: t.Flows.filter((f) => vis.flowOk.has(String(f.flowId))).map((f) => pub("Flows", f)),
     holidays: t.Holidays.filter((h) => h.deleted !== "Y" && (h.published !== "N" || ctx.allow("attendance", "configure"))).map((h) => pub("Holidays", h)),
     absences: t.Absences.filter((a) => a.deleted !== "Y" && String(a.toDate) >= recent && (inAtt(a.userId) || a.backupUserId === ctx.actorId || a.userId === ctx.actorId)).map((a) => pub("Absences", a)),
@@ -120,6 +121,7 @@ export async function getFlowData(ctx: Ctx, p: Record<string, unknown>, live: bo
       const o: Record<string, unknown> = known
         ? { userId: u.userId, name: u.name, role: u.role, status: u.status, managerId: u.managerId, notify: u.notify, department: u.department, empCode: u.empCode, leaveAllot: u.leaveAllot, photoVer: u.photoVer }
         : { userId: u.userId, name: u.name, status: u.status, department: u.department, photoVer: u.photoVer };
+      o.notEmployee = isEmployee(u) ? "" : "Y"; // the screens leave such accounts out of every team list, ranking and assignment picker
       if (u.userId === ctx.actorId || (seesContacts && inEmp(u.userId))) { o.mobile = u.mobile; o.email = u.email; }
       // when somebody left (or leaves): the date and kind to people who know them; the note and who took over only to those who may record exits
       if (known && u.exitDate) { o.exitDate = u.exitDate; o.exitType = u.exitType; o.exitDone = u.exitDone; if (canExit) { o.exitReason = u.exitReason; o.exitHandover = u.exitHandover; o.exitBy = u.exitBy; } }

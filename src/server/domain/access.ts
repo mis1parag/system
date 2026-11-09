@@ -65,6 +65,22 @@ export async function deleteRole(ctx: Ctx, d: Record<string, unknown>) {
 }
 
 /** A person's role, custom role and personal overrides (module-by-module). `overrides: {}` = exactly what the role gives. */
+/**
+ * Mark a Super Admin as "Super Admin only": not an employee. They keep every Super Admin power, but they do not mark attendance, apply for leave, get tasks,
+ * and they are left out of team lists, attendance dashboards, rankings, reports and salary. Only a Super Admin can change this, and only on a Super Admin account.
+ */
+export async function setSuperAdminOnly(ctx: Ctx, d: Record<string, unknown>) {
+  require_(ctx.isSuper, "Only a Super Admin can do this");
+  const u = (await ctx.tx.rows("Users")).find((x) => x.userId === String(d.userId ?? "") && x.deleted !== "Y");
+  require_(u, "Choose the person");
+  const on = d.on === true;
+  if (on) require_(u.role === "SUPER_ADMIN", "Only a Super Admin account can be marked this way — make the person a Super Admin first");
+  const before = String(u.notEmployee ?? "");
+  u.notEmployee = on ? "Y" : "";
+  ctx.tx.audit(on ? "Marked Super Admin only (not an employee)" : "Counted as an employee again", "Users", String(u.userId), { notEmployee: before }, { notEmployee: u.notEmployee, person: u.name });
+  return { userId: u.userId, notEmployee: u.notEmployee };
+}
+
 export async function saveUserAccess(ctx: Ctx, d: Record<string, unknown>) {
   needSuper(ctx);
   const users = await ctx.tx.rows("Users");

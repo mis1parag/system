@@ -1,5 +1,6 @@
 /** Leave, year by year: the company policy of each year, a person's own allowance and adjustments, and the balances worked out from them (see yearBalance in lib/attendance.ts). */
 import { calFrom, yearBalance, type LeaveAdjustRow, type LeavePolicyRow } from "../../lib/attendance.ts";
+import { isEmployee } from "../../lib/people.ts";
 import type { LeaveRow } from "../../lib/flow-types.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
@@ -24,7 +25,7 @@ export async function getLeaveYear(ctx: Ctx, d: Record<string, unknown>) {
   const year = str(d.year) || ctx.clock.date.slice(0, 4);
   require_(isYear(year), "Choose a valid year");
   const reach = await ctx.reach("attendance");
-  const users = (await ctx.tx.rows("Users")).filter((u) => u.status === "Active");
+  const users = (await ctx.tx.rows("Users")).filter((u) => u.status === "Active" && isEmployee(u));
   const wanted = str(d.userId);
   let ids: string[];
   if (wanted) { await ctx.requireInReach(wanted); ids = [wanted]; }
@@ -61,7 +62,7 @@ export async function setLeaveAdjust(ctx: Ctx, d: Record<string, unknown>) {
   const userId = str(d.userId), year = str(d.year);
   require_(isYear(year), "Choose a valid year");
   const user = await ctx.user(userId);
-  require_(user && user.status === "Active", "Choose the person");
+  require_(user && user.status === "Active" && isEmployee(user), "Choose the person");
   if (!ctx.allow("attendance", "configure")) { if (!(await ctx.manages(userId))) fail("FORBIDDEN", "You cannot change this person's leave balance"); }
   const allot = str(d.allot) === "" ? null : num(d.allot), delta = str(d.delta) === "" ? 0 : num(d.delta);
   require_(allot === null || (!isNaN(allot) && allot >= 0 && allot <= 366), "Allowance must be between 0 and 366");

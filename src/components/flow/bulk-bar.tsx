@@ -37,7 +37,7 @@ export function BulkBar({ flow, selected, onClear, onExport }: { flow: Flow; sel
           <Button size="icon-sm" variant="ghost" className="ml-auto shrink-0" aria-label="Clear selection" onClick={onClear}><XIcon /></Button>
         </div>
       </div>
-      {op && <BulkDialog op={op} flow={flow} ids={[...selected]} users={(data?.users ?? []).filter((u) => u.status === "Active" && (data?.reach?.fms?.all || data?.reach?.fms?.ids.includes(u.userId)))} call={call} onClose={() => setOp(null)} onDone={() => { setOp(null); onClear(); }} />}
+      {op && <BulkDialog op={op} flow={flow} ids={[...selected]} users={(data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y" && (data?.reach?.fms?.all || data?.reach?.fms?.ids.includes(u.userId)))} call={call} onClose={() => setOp(null)} onDone={() => { setOp(null); onClear(); }} />}
     </>
   );
 }

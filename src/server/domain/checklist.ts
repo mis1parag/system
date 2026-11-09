@@ -5,6 +5,7 @@
 import { CHECKLIST_FREQ, type ChecklistFreq } from "../../lib/flow-types.ts";
 import { checklistOwner, parseFreq } from "../../lib/checklist-shared.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { Ctx } from "./ctx.ts";
 import { isJpeg } from "./devices.ts";
 import { absenceRows } from "./tasks.ts";
@@ -49,7 +50,7 @@ export async function generateChecklist(ctx: Ctx, only?: Rec[]): Promise<{ creat
 
 async function activeUser(ctx: Ctx, id: string) {
   const u = (await ctx.tx.rows("Users")).find((x) => x.userId === id);
-  return u && u.status === "Active" ? u : undefined;
+  return u && u.status === "Active" && isEmployee(u) ? u : undefined; // a Super-Admin-only account is never a doer or a buddy
 }
 
 /** Create or edit a checklist task. Changing the schedule re-creates its coming entries; pausing / archiving cancels them. */

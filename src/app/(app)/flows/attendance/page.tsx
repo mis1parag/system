@@ -32,28 +32,29 @@ const CELL: Record<DayStatus, string> = {
 const LEAVE_TONE = { Pending: "amber", Approved: "green", Rejected: "red", Cancelled: "gray" } as const;
 
 export default function AttendancePage() {
-  const { meId, peopleFor, has, userById } = useFlows();
+  const { meId, peopleFor, has, userById, data } = useFlows();
+  const worker = data?.me.notEmployee !== "Y"; // a Super-Admin-only account has no attendance of its own
   const empCode = userById(meId)?.empCode ?? "";
   const people = peopleFor("attendance");
   const sp = useSearchParams();
   const [tabPick, setTab] = useState<string | null>(null);
   const [person, setPerson] = useState(sp.get("person") ?? "");
-  const tab = tabPick ?? sp.get("tab") ?? "mark";
-  const sees = people.length > 1; // somebody else is in reach (a manager's team, a department)
+  const tab = tabPick ?? sp.get("tab") ?? (worker ? "mark" : people.length > 1 ? "today" : "report");
+  const sees = people.length > (worker ? 1 : 0); // somebody else is in reach (a manager's team, a department)
   return (
     <>
       <PageHeader
         title="Attendance"
-        subtitle={`Mark your attendance, see your month, apply for leave.${empCode ? ` Your Employee ID: ${empCode}` : ""}`}
+        subtitle={worker ? `Mark your attendance, see your month, apply for leave.${empCode ? ` Your Employee ID: ${empCode}` : ""}` : "Your team's attendance. Super Admin accounts do not mark attendance."}
         help={{ id: "attendance", title: "How attendance is counted", text: "6 hours or more = a full day, 4 hours or more = a half day, less = absent. Check-in after 09:30 is late, check-out before 17:00 is early. Sundays and holidays are not working days (Sunday work of 4 hours+ counts as overtime). All of this can be changed in Settings." }}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <div className="mb-3 overflow-x-auto"><TabsList>
-          <TabsTrigger value="mark">Mark attendance</TabsTrigger>
-          <TabsTrigger value="me">{person && person !== meId ? "Their month" : "My month"}</TabsTrigger>
+          {worker && <TabsTrigger value="mark">Mark attendance</TabsTrigger>}
+          {(worker || !!person) && <TabsTrigger value="me">{person && person !== meId ? "Their month" : "My month"}</TabsTrigger>}
           {sees && <TabsTrigger value="today">Team today</TabsTrigger>}
           {sees && <TabsTrigger value="report">Monthly report</TabsTrigger>}
-          <TabsTrigger value="leave">Leave</TabsTrigger>
+          {worker && <TabsTrigger value="leave">Leave</TabsTrigger>}
           {has("payroll") && <TabsTrigger value="salary">Salary slip</TabsTrigger>}
         </TabsList></div>
         <TabsContent value="mark"><MarkTab /></TabsContent>
@@ -182,7 +183,7 @@ function Report({ onOpen }: { onOpen: (id: string) => void }) {
   const att = useAttendance();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [fstate, setFstate] = useFilters("attendance:report", "all");
-  const people = (data?.users ?? []).filter((u) => inReach(u.userId, "attendance") && (u.status === "Active" || att.rows.some((r) => r.userId === u.userId && r.date.startsWith(month))));
+  const people = (data?.users ?? []).filter((u) => u.notEmployee !== "Y" && inReach(u.userId, "attendance") && (u.status === "Active" || att.rows.some((r) => r.userId === u.userId && r.date.startsWith(month))));
   const from = monthStart(month), to = monthEnd(month);
   const reps = useMemo(() => att.team(people.map((u) => u.userId), from, to).map((r) => ({ r, u: people.find((p) => p.userId === r.userId)! })).filter(({ r }) => r.workingDays > 0 || r.totalHours > 0), [att, people, from, to]);
   type R = (typeof reps)[number];

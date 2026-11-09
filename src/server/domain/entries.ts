@@ -1,5 +1,6 @@
 /** Entries (one PO / case): create, import, edit, postpone, cancel, comments, bulk actions. */
 import type { Flow, FlowField } from "../../lib/flow-types.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { PRIORITIES } from "../../lib/flow-types.ts";
 import { effectiveAssignee } from "../../lib/flow-shared.ts";
 import { MidapError, fail, forbid, newId, pub, require_, type Rec } from "../sheets/db.ts";
@@ -93,7 +94,7 @@ export async function addEntries(ctx: Ctx, flowId: string, rows: NewEntry[], opt
   const items = await tx.rows("Flow_Items");
   const seen = new Set<string>();
   items.filter((i) => i.flowId === flowId && i.status !== "Cancelled").forEach((i) => { const k = uniqueKey(flow, parseData(i)); if (k) seen.add(k); });
-  const users = new Set((await tx.rows("Users")).filter((u) => u.status === "Active").map((u) => String(u.userId)));
+  const users = new Set((await tx.rows("Users")).filter((u) => u.status === "Active" && isEmployee(u)).map((u) => String(u.userId)));
 
   const usesPool = flow.steps.some((s) => s.assign?.type === "pool");
   const openLoad = new Map<string, number>();
@@ -172,7 +173,7 @@ export async function createEntry(ctx: Ctx, d: Record<string, unknown>) {
     ctx.require("fms", "assign", "You cannot choose who does a step");
     const reach = await ctx.reach("fms");
     const u = await ctx.user(id);
-    require_(u && u.status === "Active" && u.deleted !== "Y", "Choose active people for the steps");
+    require_(u && u.status === "Active" && u.deleted !== "Y" && isEmployee(u), "Choose active employees for the steps");
     forbid(reach.all || reach.ids.has(id), "That person is outside your access");
     assignees[stepId] = id;
   }

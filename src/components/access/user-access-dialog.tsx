@@ -23,6 +23,7 @@ export function UserAccessDialog({ userId, roles, onClose }: { userId: string; r
   const [perms, setPerms] = useState<PermSet>(() => effectivePermSet(u?.role ?? "STAFF", roles.find((r) => r.roleId === (a?.roleId || u?.role))?.perms ?? {}, a?.overrides ?? {}));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [only, setOnly] = useState(u?.notEmployee === "Y");
   if (!u) return null;
   const isSuperUser = role === "SUPER_ADMIN";
   const changeRole = (v: string) => {
@@ -34,6 +35,11 @@ export function UserAccessDialog({ userId, roles, onClose }: { userId: string; r
   async function save() {
     setBusy(true); setErr("");
     const r = await call("saveUserAccess", { userId, role, roleId, overrides: overridesOf(perms, template) });
+    // "Super Admin only" (not an employee) is saved on its own, once the role is right
+    if (r.ok && (role === "SUPER_ADMIN" ? only : false) !== (u?.notEmployee === "Y")) {
+      const r2 = await call("setSuperAdminOnly", { userId, on: role === "SUPER_ADMIN" && only });
+      if (!r2.ok) { setBusy(false); setErr(r2.error || "Could not save"); return; }
+    }
     setBusy(false);
     if (!r.ok) { setErr(r.error || "Could not save"); return; }
     toast.success(`Access of ${userName(userId)} saved`);
@@ -48,6 +54,12 @@ export function UserAccessDialog({ userId, roles, onClose }: { userId: string; r
           <Field label="Role" className="w-60"><NativeSelect value={roleId || role} onChange={(e) => changeRole(e.target.value)}>{roles.map((r) => <option key={r.roleId} value={r.roleId}>{r.name}{r.system ? "" : " (custom)"}</option>)}</NativeSelect></Field>
           <Button variant="ghost" onClick={() => setPerms(template)} disabled={isSuperUser}><RotateCcwIcon /> Same as the role</Button>
         </div>
+        {isSuperUser && (
+          <label className="flex items-start gap-2 rounded-lg border bg-card p-3 text-sm">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-input" checked={only} onChange={(e) => setOnly(e.target.checked)} />
+            <span><b>Super Admin only — not an employee.</b> Keeps every Super Admin power, but no attendance or leave, no tasks, and the person is left out of team lists, attendance dashboards, rankings, reports and salary.</span>
+          </label>
+        )}
         {isSuperUser ? <p className="rounded-lg border bg-card p-3 text-sm text-muted-foreground">Super Admin: everything, always.</p> : <PermissionMatrix value={perms} template={template} onChange={setPerms} />}
         {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
         <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy}>{busy ? <Spinner /> : "Save access"}</Button></DialogFooter>

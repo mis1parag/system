@@ -1,5 +1,6 @@
 /** FMS definitions: create / edit / archive, re-plan, intake token. */
 import { randomBytes } from "node:crypto";
+import { isEmployee } from "../../lib/people.ts";
 import type { AssignRule, Flow, FlowField, FlowRule, FlowStep, Recurrence, StepCondition } from "../../lib/flow-types.ts";
 import { parseFlow } from "../../lib/flow-parse.ts";
 import type { FlowRec } from "../../lib/flow-types.ts";
@@ -76,7 +77,7 @@ async function buildFlowDef(ctx: Ctx, d: Record<string, unknown>, existing: Rec 
   const flows = await ctx.tx.rows("Flows");
   require_(!flows.some((f) => f !== existing && String(f.name).toLowerCase() === name.toLowerCase()), `Another FMS is already called "${name}"`);
   const users = await ctx.tx.rows("Users");
-  const activeUser = (id: string) => users.some((u) => u.userId === id && u.status === "Active");
+  const activeUser = (id: string) => users.some((u) => u.userId === id && u.status === "Active" && isEmployee(u));
 
   const fields = buildFields(d.fields, "entry field", true);
   const anchor = str(d.anchorField);
@@ -235,7 +236,7 @@ export async function updateFlow(ctx: Ctx, d: Record<string, unknown>) {
   // keep seq in sync with the new order
   for (const t of mine) { const idx = flow.steps.findIndex((s) => s.stepId === t.stepId) + 1; if (idx > 0) t.seq = idx; }
   if (added.length && items.length) {
-    const users = new Set((await ctx.tx.rows("Users")).filter((u) => u.status === "Active").map((u) => String(u.userId)));
+    const users = new Set((await ctx.tx.rows("Users")).filter((u) => u.status === "Active" && isEmployee(u)).map((u) => String(u.userId)));
     const load = new Map<string, number>();
     for (const item of items) {
       const data = JSON.parse(String(item.dataJson || "{}")) as Data;

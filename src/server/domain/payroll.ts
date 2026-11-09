@@ -6,6 +6,7 @@
 import { allows, reachOf, scopeOfGrant } from "../../lib/permissions.ts";
 import { fail, forbid, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { BRAND } from "../../lib/brand.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { Ctx } from "./ctx.ts";
 import { cancelSlipMails, queueSlipMail } from "./mail-log.ts";
 
@@ -98,7 +99,7 @@ export async function saveSlip(ctx: Ctx, d: Record<string, unknown>) {
   require_(!id || existing, "Unknown salary slip");
   const userId = existing ? String(existing.userId) : str(d.userId);
   const user = await ctx.user(userId);
-  require_(user && user.status === "Active", "Choose the employee");
+  require_(user && user.status === "Active" && isEmployee(user), "Choose the employee");
   forbid(userId !== ctx.actorId || ctx.isSuper, "You cannot prepare your own salary slip");
   forbid(await preparesFor(ctx, userId), "That person is outside your payroll access");
   const period = existing ? String(existing.period) : str(d.period);
@@ -162,7 +163,7 @@ export async function importSlips(ctx: Ctx, d: Record<string, unknown>) {
   ctx.require("payroll", "import", "You cannot import salary slips");
   const input = Array.isArray(d.rows) ? (d.rows as Record<string, unknown>[]) : [];
   require_(input.length > 0 && input.length <= 500, "Import between 1 and 500 rows");
-  const users = (await ctx.tx.rows("Users")).filter((u) => u.status === "Active");
+  const users = (await ctx.tx.rows("Users")).filter((u) => u.status === "Active" && isEmployee(u));
   const all = await ctx.tx.rows("Salary_Slips");
   const have = new Set(alive(all).map((s) => `${s.userId}|${s.period}`));
   let added = 0; const problems: string[] = [];

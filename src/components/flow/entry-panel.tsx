@@ -63,7 +63,7 @@ function ReassignDialog({ task, onClose }: { task: FlowTask; onClose: () => void
   const [to, setTo] = useState(task.assigneeId);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const people = (data?.users ?? []).filter((u) => u.status === "Active");
+  const people = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y");
   async function save() {
     setBusy(true); setErr("");
     const r = await call("reassignTask", { taskId: task.taskId, assigneeId: to });

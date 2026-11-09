@@ -85,7 +85,7 @@ function Unified({ state, onState, onAdd }: { state: FilterState; onState: (s: F
 
   const depts = useMemo(() => [...new Set([...(data?.checklistTasks ?? []).map((t) => t.department), ...(data?.departments ?? [])].map((x) => x.trim()).filter(Boolean))].sort(), [data]);
   const fields = useMemo<FieldDef<Row>[]>(() => [
-    { key: "who", label: "Person", type: "user", options: (data?.users ?? []).filter((u) => u.status === "Active").map((u) => ({ value: u.userId, label: u.name })), get: (r) => r.owner },
+    { key: "who", label: "Person", type: "user", options: (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y").map((u) => ({ value: u.userId, label: u.name })), get: (r) => r.owner },
     { key: "title", label: "Task", type: "text", get: (r) => r.t.title },
     { key: "kind", label: "Type", type: "select", options: [{ value: "DC", label: "Daily" }, { value: "NDC", label: "Non-daily" }, { value: "OT", label: "One-time" }], get: (r) => groupOf(r.t.freq) },
     { key: "freq", label: "How often", type: "select", options: CHECKLIST_FREQ.map((f) => ({ value: f.id, label: f.label })), get: (r) => r.t.freq },

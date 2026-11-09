@@ -36,7 +36,8 @@ export function useDayState() {
   const mode = (s.ATT_GATE ?? "required") as "required" | "prompt" | "off";
   const me = data?.users.find((u) => u.userId === meId);
   const mine = att.rows.filter((r) => r.userId === meId);
-  const tracked = !!me?.empCode || mine.some((r) => r.date >= addDaysStr(today, -45));
+  const worker = data?.me.notEmployee !== "Y"; // Super Admin only: no check-in screen, no reminders
+  const tracked = worker && (!!me?.empCode || mine.some((r) => r.date >= addDaysStr(today, -45)));
   const day = att.days(meId, today, today)[0];
   const todays = mine.filter((r) => r.date === today);
   const asked = new Set((data?.requests ?? []).filter((q) => q.kind === "checkout" && q.status === "Pending").map((q) => q.taskId));

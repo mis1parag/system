@@ -7,6 +7,7 @@ import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { checklistCalendar } from "./checklist.ts";
 import { Ctx } from "./ctx.ts";
 import { guardPunch } from "./devices.ts";
+import { isEmployee, NOT_EMPLOYEE_MSG } from "../../lib/people.ts";
 import { isDate, isTime, minutesBetween, normDT } from "./time.ts";
 
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
@@ -51,6 +52,7 @@ async function punchOut(ctx: Ctx, userId: string, d: Record<string, unknown>) {
 }
 
 export async function checkIn(ctx: Ctx, d: Record<string, unknown>) {
+  require_(isEmployee(ctx.actor), NOT_EMPLOYEE_MSG);
   selfPunchAllowed(ctx);
   const device = await guardPunch(ctx, d); // registered laptop + compulsory camera, checked on the server
   const rec = await punchIn(ctx, ctx.actorId, d, "app");
@@ -59,6 +61,7 @@ export async function checkIn(ctx: Ctx, d: Record<string, unknown>) {
 }
 
 export async function checkOut(ctx: Ctx, d: Record<string, unknown>) {
+  require_(isEmployee(ctx.actor), NOT_EMPLOYEE_MSG);
   selfPunchAllowed(ctx);
   const device = await guardPunch(ctx, d);
   const rec = await punchOut(ctx, ctx.actorId, d);
@@ -88,6 +91,7 @@ export async function attendanceApprovers(ctx: Ctx, userId: string): Promise<str
  * and the day's check-out is written only when it is approved. Until then the punch stays open and the day shows no hours.
  */
 export async function closeMyPunch(ctx: Ctx, d: Record<string, unknown>) {
+  require_(isEmployee(ctx.actor), NOT_EMPLOYEE_MSG);
   const r = alive(await ctx.tx.rows("Attendance")).find((x) => x.attId === str(d.attId));
   require_(r && r.userId === ctx.actorId, "That punch is not yours");
   require_(!r.checkOut, "That punch is already closed");
@@ -138,6 +142,7 @@ export async function kioskPunch(ctx: Ctx, d: Record<string, unknown>) {
   const users = await ctx.tx.rows("Users");
   const u = users.find((x) => str(x.empCode).toLowerCase() === code && x.status === "Active");
   require_(u, `No active person has the Employee ID "${str(d.empCode).slice(0, 30)}"`);
+  require_(isEmployee(u), NOT_EMPLOYEE_MSG);
   await ctx.db.load(["Attendance"], { fresh: true });
   const isOut = alive(await ctx.tx.rows("Attendance")).some((r) => r.userId === u.userId && r.date === ctx.clock.date && !r.checkOut);
   const rec = isOut ? await punchOut(ctx, String(u.userId), d) : await punchIn(ctx, String(u.userId), d, "kiosk");
@@ -162,6 +167,7 @@ export async function markAttendance(ctx: Ctx, d: Record<string, unknown>) {
   require_(!str(d.attId) || existing, "Unknown attendance entry");
   const userId = existing ? String(existing.userId) : str(d.userId);
   require_(users.some((u) => u.userId === userId), "Choose the person");
+  require_(isEmployee(users.find((u) => u.userId === userId)), NOT_EMPLOYEE_MSG);
   await ctx.requireInReach(userId);
   const date = existing ? String(existing.date) : str(d.date);
   require_(isDate(date), "Choose a valid date");
@@ -197,7 +203,7 @@ export async function importAttendance(ctx: Ctx, d: Record<string, unknown>) {
   const input = Array.isArray(d.rows) ? (d.rows as Record<string, unknown>[]) : [];
   require_(input.length > 0, "Nothing to import");
   require_(input.length <= 2000, "Import at most 2000 rows at a time");
-  const users = new Set((await ctx.tx.rows("Users")).map((u) => String(u.userId)));
+  const users = new Set((await ctx.tx.rows("Users")).filter((u) => isEmployee(u)).map((u) => String(u.userId)));
   const have = new Set(alive(await ctx.tx.rows("Attendance")).map((r) => `${r.userId}|${r.checkIn}`));
   let added = 0, skipped = 0;
   const problems: string[] = [];
@@ -231,6 +237,7 @@ export async function requestLeave(ctx: Ctx, d: Record<string, unknown>) {
   if (userId !== ctx.actorId) await ctx.requireInReach(userId);
   const user = await ctx.user(userId);
   require_(user && user.status === "Active", "Unknown person");
+  require_(isEmployee(user), NOT_EMPLOYEE_MSG);
   const type = str(d.type);
   require_((LEAVE_TYPES as readonly string[]).includes(type), "Choose the type of leave");
   const start = str(d.startDate), end = type === "Full Day" ? str(d.endDate) || start : start;
@@ -303,7 +310,7 @@ export async function cancelLeave(ctx: Ctx, d: Record<string, unknown>) {
 export async function importLeaves(ctx: Ctx, d: Record<string, unknown>) {
   const input = Array.isArray(d.rows) ? (d.rows as Record<string, unknown>[]) : [];
   require_(input.length > 0 && input.length <= 1000, "Import between 1 and 1000 leave rows");
-  const users = new Set((await ctx.tx.rows("Users")).map((u) => String(u.userId)));
+  const users = new Set((await ctx.tx.rows("Users")).filter((u) => isEmployee(u)).map((u) => String(u.userId)));
   const cal = await checklistCalendar(ctx);
   const have = new Set((await ctx.tx.rows("Leaves")).map((l) => `${l.userId}|${l.startDate}|${l.endDate}|${l.type}`));
   let added = 0, skipped = 0;

@@ -119,7 +119,7 @@ export function LeaveDialog({ onClose }: { onClose: () => void }) {
   const isAdmin = allow("attendance", "manage");
   const reach = peopleFor("attendance");
   const att = useAttendance();
-  const people = (data?.users ?? []).filter((u) => u.status === "Active"); // anyone can be a backup
+  const people = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y"); // anyone can be a backup
   const forOthers = isAdmin && reach.length > 1;
   const [who, setWho] = useState(meId);
   const [type, setType] = useState<string>("Full Day");

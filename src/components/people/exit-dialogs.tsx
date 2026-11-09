@@ -39,7 +39,7 @@ export function RemoveUserDialog({ user, onClose }: { user: FlowUser; onClose: (
       reports: (data?.users ?? []).filter((u) => u.managerId === user.userId && u.status === "Active").length,
     };
   }, [data, user.userId]);
-  const colleagues = (data?.users ?? []).filter((u) => u.status === "Active" && u.userId !== user.userId).sort((a, b) => a.name.localeCompare(b.name));
+  const colleagues = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y" && u.userId !== user.userId).sort((a, b) => a.name.localeCompare(b.name));
   const future = date > today;
   const hasWork = work.steps + work.checklist + work.reports > 0;
 

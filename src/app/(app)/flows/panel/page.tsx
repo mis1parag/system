@@ -62,7 +62,7 @@ export default function HomePage() {
     }
 
     // the team, when the person can see one
-    const peopleIn = (data?.users ?? []).filter((u) => u.status === "Active" && u.userId !== meId && inReach(u.userId, "attendance"));
+    const peopleIn = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y" && u.userId !== meId && inReach(u.userId, "attendance"));
     const here = attendance ? peopleIn.filter((u) => { const d = att.days(u.userId, today, today)[0]; return d.status === "present" || d.status === "half" || d.punches > 0; }).length : 0;
     const notIn = attendance ? peopleIn.filter((u) => { const d = att.days(u.userId, today, today)[0]; return d.status === "pending" && d.punches === 0; }).length : 0;
     const pendingLeave = attendance && allow("attendance", "approve") ? (data?.leaves ?? []).filter((l) => l.status === "Pending" && l.userId !== meId && inReach(l.userId, "attendance")).length : 0;
@@ -75,7 +75,7 @@ export default function HomePage() {
       const s = st(w);
       if (s === "overdue") l.overdue++; else if (s === "today") l.today++;
     }
-    const workload = (data?.users ?? []).filter((u) => u.status === "Active" && u.userId !== meId && inReach(u.userId, "fms") && load.has(u.userId)).map((u) => ({ u, l: load.get(u.userId)! })).sort((a, b) => b.l.overdue - a.l.overdue || b.l.open - a.l.open).slice(0, 8);
+    const workload = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y" && u.userId !== meId && inReach(u.userId, "fms") && load.has(u.userId)).map((u) => ({ u, l: load.get(u.userId)! })).sort((a, b) => b.l.overdue - a.l.overdue || b.l.open - a.l.open).slice(0, 8);
     return { mine, overdue, dueToday, attention, teamLate, clDone, clOpen, clOverdue, peopleIn: peopleIn.length, here, notIn, pendingLeave, decisions, workload };
   }, [data, fms, checklist, attendance, today, n, meId, inReach, allow, att]);
 

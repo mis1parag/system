@@ -58,7 +58,7 @@ export default function MyTasksPage() {
     { key: "step", label: "Step", type: "text", get: (r) => flows.find((f) => f.flowId === r.t.flowId)?.steps.find((s) => s.stepId === r.t.stepId)?.name },
     { key: "entry", label: "Entry", type: "text", get: (r) => r.item.title },
     { key: "status", label: "Status", type: "select", options: [{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "upcoming", label: "Upcoming" }, { value: "unplanned", label: "Waiting" }, { value: "done", label: "Completed" }], get: (r) => r.state },
-    { key: "who", label: "Assigned to", type: "user", options: (data?.users ?? []).filter((u) => u.status === "Active").map((u) => ({ value: u.userId, label: u.name })), get: (r) => r.who },
+    { key: "who", label: "Assigned to", type: "user", options: (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y").map((u) => ({ value: u.userId, label: u.name })), get: (r) => r.who },
     { key: "priority", label: "Priority", type: "select", options: PRIORITIES.map((p) => ({ value: p, label: p })), get: (r) => r.item.priority },
     { key: "due", label: "Due date", type: "date", get: (r) => (r.state === "done" ? r.t.actual : r.t.planned)?.slice(0, 10) },
     { key: "dept", label: "Department", type: "select", options: (data?.departments ?? []).map((d) => ({ value: d, label: d })), get: (r) => data?.users.find((u) => u.userId === r.who)?.department },

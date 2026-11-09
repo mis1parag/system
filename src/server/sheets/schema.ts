@@ -26,6 +26,7 @@ export const TABLES: Record<string, TableDef> = {
       ["roleId", "Custom Role", "s"], ["permsJson", "Personal Access Overrides (JSON)", "s"],
       ["exitDate", "Last working day (exit)", "s"], ["exitType", "Exit type", "s"], ["exitReason", "Exit note", "s"], ["exitHandover", "Work handed over to", "s"],
       ["exitBy", "Exit recorded by", "s"], ["exitAt", "Exit recorded at", "s"], ["exitDone", "Exit applied (Y)", "s"], ["deleted", "Deleted", "s"],
+      ["notEmployee", "Super Admin only — not an employee (Y)", "s"],
     ],
   },
   /** One small profile picture per person (JPEG data). Served by /api/avatar/<id>, never part of the page data. */

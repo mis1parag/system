@@ -86,7 +86,7 @@ export interface ChecklistEntry {
 }
 export interface Holiday { holidayId: string; date: string; label: string; flowId: string }
 export interface Absence { absenceId: string; userId: string; fromDate: string; toDate: string; backupUserId: string; reason: string; createdBy: string; createdAt: string }
-export interface FlowUser { userId: string; name: string; role: string; status: string; managerId?: string; notify?: string; mobile?: string; email?: string; department?: string; empCode?: string; leaveAllot?: number; photoVer?: string; exitDate?: string; exitType?: string; exitDone?: string; exitReason?: string; exitHandover?: string; exitBy?: string; deleted?: string }
+export interface FlowUser { userId: string; name: string; role: string; status: string; /** "Y" = Super Admin only, not an employee: left out of team lists, rankings and assignment pickers */ notEmployee?: string; managerId?: string; notify?: string; mobile?: string; email?: string; department?: string; empCode?: string; leaveAllot?: number; photoVer?: string; exitDate?: string; exitType?: string; exitDone?: string; exitReason?: string; exitHandover?: string; exitBy?: string; deleted?: string }
 export interface QuickLink { linkId: string; ownerId: string; title: string; url: string; category: string; favorite: string; sortOrder: number; createdBy: string; createdAt: string; updatedAt: string }
 export interface SavedFilter { filterId: string; userId: string; page: string; name: string; paramsJson: string; isDefault: string; shared: string; createdAt: string; updatedAt: string }
 export interface RoleInfo { roleId: string; name: string; description: string; base: string; system: boolean; customized: boolean; perms: PermSet; people: number }
@@ -107,7 +107,7 @@ export interface LeaveRow {
 export interface FlowBundle {
   /** Entry totals per flow across ALL history (the loaded items are only open + recent). */
   counts: Record<string, { open: number; completed: number; cancelled: number }>;
-  serverDate: string; serverTime: string; me: User & { managerId?: string; notify?: string };
+  serverDate: string; serverTime: string; me: User & { managerId?: string; notify?: string; notEmployee?: string };
   flows: FlowRec[]; holidays: Holiday[]; absences: Absence[]; users: FlowUser[]; items: FlowItem[]; tasks: FlowTask[];
   requests: FlowRequest[]; notifications: Notification[]; unread: number;
   /** Checklist tasks, and their dated entries (pending ones + roughly the last 70 days). */

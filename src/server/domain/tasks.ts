@@ -1,5 +1,6 @@
 /** Steps: complete, undo, reassign, extension requests. */
 import type { Flow, FlowStep } from "../../lib/flow-types.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { effectiveAssignee } from "../../lib/flow-shared.ts";
 import { fail, newId, pub, require_, type Rec } from "../sheets/db.ts";
 import { Ctx } from "./ctx.ts";
@@ -92,7 +93,7 @@ export async function reassignTask(ctx: Ctx, d: Record<string, unknown>) {
   if (!(await canActOnTask(ctx, task))) fail("FORBIDDEN", "This step is assigned to someone else");
   const to = str(d.assigneeId);
   const u = await ctx.user(to);
-  require_(u && u.status === "Active", "Choose an active person");
+  require_(u && u.status === "Active" && isEmployee(u), "Choose an active employee");
   const old = String(task.assigneeId);
   task.assigneeId = to; task.updatedAt = ctx.clock.stamp; task.remindedAt = ""; task.overdueAt = ""; task.escalatedAt = "";
   ctx.tx.audit("Step reassigned", "Flow_Tasks", String(task.taskId), { assignee: old }, { assignee: to });

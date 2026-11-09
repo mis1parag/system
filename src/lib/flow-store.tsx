@@ -151,7 +151,7 @@ export function FlowProvider({ children }: { children: ReactNode }) {
   const reach = useMemo(() => Object.fromEntries(MODULE_IDS.map((m) => [m, { all: !!data?.reach?.[m]?.all, ids: new Set(data?.reach?.[m]?.ids ?? []) }])) as Record<ModuleId, { all: boolean; ids: Set<string> }>, [data?.reach]);
   const inReach = useCallback((id: string, module: ModuleId | "people" | "work" = "attendance") => { const r = reach[module === "people" ? "attendance" : module === "work" ? "fms" : module]; return !!r && (r.all || r.ids.has(id)); }, [reach]);
   const meIdForList = data?.me.userId ?? "";
-  const peopleFor = useCallback((m: ModuleId) => (users ?? []).filter((u) => u.status === "Active" && (reach[m].all || reach[m].ids.has(u.userId))).sort((a, b) => (a.userId === meIdForList ? -1 : b.userId === meIdForList ? 1 : a.name.localeCompare(b.name))), [users, reach, meIdForList]);
+  const peopleFor = useCallback((m: ModuleId) => (users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y" && (reach[m].all || reach[m].ids.has(u.userId))).sort((a, b) => (a.userId === meIdForList ? -1 : b.userId === meIdForList ? 1 : a.name.localeCompare(b.name))), [users, reach, meIdForList]);
 
   const value: FlowStore = {
     data, loading, error, flows, userById, userName, meId: data?.me.userId ?? "",

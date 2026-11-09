@@ -81,7 +81,7 @@ function AbsenceDialog({ onClose }: { onClose: () => void }) {
   const { data, can, meId, call, today, userName, peopleFor } = useFlows();
   const reach = peopleFor("attendance");
   const isAdmin = can("manageHolidays") && reach.length > 1;
-  const everyone = (data?.users ?? []).filter((u) => u.status === "Active");
+  const everyone = (data?.users ?? []).filter((u) => u.status === "Active" && u.notEmployee !== "Y");
   const people = isAdmin ? reach : everyone;
   const [userId, setUserId] = useState(meId);
   const [from, setFrom] = useState(today);

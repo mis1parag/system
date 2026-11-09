@@ -8,6 +8,7 @@
 import { attSettings, calFrom, personDays } from "../../lib/attendance.ts";
 import type { AttendanceRow, LeaveRow } from "../../lib/flow-types.ts";
 import { require_, type Rec } from "../sheets/db.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { Ctx } from "./ctx.ts";
 
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
@@ -27,7 +28,7 @@ export async function getLeaderboard(ctx: Ctx, d: Record<string, unknown>) {
   require_(/^\d{4}-(0[1-9]|1[0-2])$/.test(month), "Choose a month");
   const from = `${month}-01`, endOfMonth = monthEnd(month);
   const to = endOfMonth < ctx.clock.date ? endOfMonth : ctx.clock.date;
-  const users = (await ctx.tx.rows("Users")).filter((u) => u.deleted !== "Y" && (u.status === "Active" || (u.exitDate && String(u.exitDate) >= from)));
+  const users = (await ctx.tx.rows("Users")).filter((u) => u.deleted !== "Y" && isEmployee(u) && (u.status === "Active" || (u.exitDate && String(u.exitDate) >= from)));
   const holidays = (await ctx.tx.rows("Holidays")).filter((h) => h.deleted !== "Y" && h.published !== "N");
   const cal = calFrom(ctx.settings, holidays as unknown as { date: string; flowId?: string }[]);
   const set = attSettings(ctx.settings);

@@ -144,6 +144,7 @@ export async function saveUser(ctx: Ctx, rec: Record<string, unknown>) {
   }
   const before = { name: existing.name, role: existing.role, mobile: existing.mobile, email: existing.email, status: existing.status, managerId: existing.managerId };
   Object.assign(existing, { name, role, mobile, email, status, managerId: manager, notify, department, empCode, leaveAllot });
+  if (role !== "SUPER_ADMIN") existing.notEmployee = ""; // the mark only belongs to a Super Admin
   if (pin) existing.pinHash = hashPin(pin);
   ctx.tx.audit("User edited", "Users", String(existing.userId), before, { name, role, mobile, email, status, managerId: manager, pinChanged: !!pin });
   return pub("Users", existing);

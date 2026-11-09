@@ -1,5 +1,6 @@
 /** Moving work: push unfinished tasks to another day, or hand them to someone else. The Super Admin decides who is allowed (capability "moveWork"). */
 import { fail, require_ } from "../sheets/db.ts";
+import { isEmployee } from "../../lib/people.ts";
 import { Ctx } from "./ctx.ts";
 import { checklistCalendar } from "./checklist.ts";
 import { addDays, isDate, isOffDay, type Calendar } from "./time.ts";
@@ -30,7 +31,7 @@ export async function moveWork(ctx: Ctx, d: Record<string, unknown>) {
   const scope = await ctx.reach(kind === "fms" ? "fms" : "checklist");
   if (toUserId) {
     const to = await ctx.user(toUserId);
-    require_(to && to.status === "Active", "Choose an active person");
+    require_(to && to.status === "Active" && isEmployee(to), "Choose an active employee");
     require_(scope.all || scope.ids.has(toUserId), "That person is outside your access");
   }
   const today = ctx.clock.date;
